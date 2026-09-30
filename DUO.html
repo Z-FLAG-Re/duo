@@ -1,0 +1,595 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="DUO単語帳">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#edf0f3" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#10151b" media="(prefers-color-scheme: dark)">
+<title>DUO単語帳</title>
+<style>
+:root{
+  --paper:#edf0f3;--card:#fff;--ink:#1b2836;--sub:#677483;--rule:#d5dce3;
+  --red:#c8102e;--sheet:#cc1a37;--on:#fff;
+  --text:"Charter","Iowan Old Style","Century Schoolbook",Georgia,"Hiragino Mincho ProN","Yu Mincho",serif;
+  --ui:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Hiragino Kaku Gothic ProN","Noto Sans JP",sans-serif;
+}
+@media (prefers-color-scheme:dark){:root{
+  --paper:#10151b;--card:#18202a;--ink:#e3e8ee;--sub:#8c98a5;--rule:#2a3440;
+  --red:#ff6679;--sheet:#c42a44;--on:#10151b;
+}}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--paper);color:var(--ink);font:16px/1.6 var(--ui);
+  padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
+#app{max-width:640px;margin:0 auto;padding:8px 16px 48px}
+.tx{font-family:var(--text)}
+.b{font-weight:700}
+.sub{color:var(--sub)}
+.small{font-size:14px}
+.redink{color:var(--red)}
+.warn{color:var(--red)}
+h1{font:600 24px/1.3 var(--text);margin:18px 0 16px}
+.panel{background:var(--card);border:1px solid var(--rule);border-radius:12px;margin:0 0 14px;overflow:hidden}
+.pad{padding:14px 16px}
+.hd{font-size:15px;font-weight:600;margin:0 0 10px}
+.note{font-size:13px;color:var(--sub);margin:10px 0 0}
+.note.tight{margin:-6px 0 12px}
+button,select,input,textarea{font:inherit;color:inherit}
+button{-webkit-appearance:none;appearance:none;background:var(--card);border:1px solid var(--rule);border-radius:10px;padding:11px 14px;cursor:pointer;touch-action:manipulation}
+button:active{opacity:.6}
+button:disabled{opacity:.35;cursor:default}
+:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+.pri{background:var(--ink);border-color:var(--ink);color:var(--on);font-weight:600}
+.sm{padding:5px 12px;font-size:14px}
+.wide{display:block;width:100%}
+.plain{background:none;border:0;padding:12px 0;color:var(--sub);text-decoration:underline;text-underline-offset:3px}
+select{font-size:16px;padding:6px 8px;border:1px solid var(--rule);border-radius:8px;background:var(--card)}
+input,textarea{font-size:16px;width:100%;padding:10px 12px;border:1px solid var(--rule);border-radius:10px;background:var(--card);line-height:1.5}
+textarea{resize:vertical}
+.range{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:17px}
+.range select{font:600 18px var(--text)}
+.cnt{margin:8px 0 16px;font-size:14px;color:var(--sub)}
+.modes button{display:flex;align-items:baseline;gap:14px;width:100%;border:0;border-top:1px solid var(--rule);border-radius:0;padding:15px 16px;text-align:left;background:none}
+.modes button:first-child{border-top:0}
+.modes .n{font:600 21px/1 var(--text);min-width:.8em}
+.modes .t{flex:1;font-weight:600}
+.modes .d{font-size:13px;color:var(--sub)}
+.row{display:flex;gap:10px}
+.row>*{flex:1}
+.bar{position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:10px;margin:0 -16px 10px;padding:8px 16px;background:var(--paper)}
+.bar h2{flex:1;margin:0;font-size:16px;font-weight:600}
+.back{padding:6px 12px;font-size:15px}
+.prog{font-size:14px;color:var(--sub);font-variant-numeric:tabular-nums}
+.meta{display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:12px;color:var(--sub);margin-bottom:8px}
+.prompt{font:21px/1.7 var(--text);margin:0 0 14px;overflow-wrap:anywhere}
+.prompt.word{font-size:36px;font-weight:600;line-height:1.25;margin:10px 0 18px}
+.prompt.ja{font-size:18px}
+.hint{font:15px/1.7 var(--text);color:var(--sub);margin:0 0 14px}
+.patch{display:inline-block;min-width:4.4em;height:1.15em;vertical-align:-.2em;margin:0 2px;border-radius:3px;background:var(--sheet);color:#fff;font:600 11px/1.15em var(--ui);text-align:center}
+.fill{color:var(--red);font-weight:600;border-bottom:2px solid currentColor}
+.cover{position:relative;overflow:hidden;border-radius:8px;margin:2px 0 14px;cursor:pointer}
+.cover .under{padding:10px 12px;min-height:3em}
+.cover .under p{margin:0}
+.cover .sheet{position:absolute;inset:0;background:var(--sheet);background-image:linear-gradient(115deg,rgba(255,255,255,.24),rgba(255,255,255,0) 36%);transition:transform .34s cubic-bezier(.2,.7,.2,1)}
+.cover.open{cursor:default}
+.cover.open .sheet{transform:translateX(104%)}
+@media (prefers-reduced-motion:reduce){.cover .sheet{transition:none}}
+.ansrow{display:flex;gap:8px}
+.ansrow input{flex:1;min-width:0}
+.mark{font:700 20px/1.2 var(--text);color:var(--red);margin:16px 0 6px}
+.wd{font-size:19px;margin:10px 0 2px}
+.mean{font:16px/1.7 var(--text)}
+.rel{list-style:none;margin:6px 0 0;padding:0;font:14px/1.6 var(--text);color:var(--sub)}
+.rel li{padding:1px 0}
+.rel .w{color:var(--ink);font-weight:600;margin-right:.3em}
+.pos{display:inline-block;font:600 11px/1.45 var(--ui);border:1px solid currentColor;border-radius:3px;padding:0 3px;margin:0 3px 0 1px;vertical-align:.12em}
+.self{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.done{text-align:center}
+.done .big{font-size:21px;font-weight:600;margin:10px 0 4px}
+.lv{display:inline-flex;gap:3px;vertical-align:middle}
+.lv i{width:8px;height:8px;border-radius:1px;background:var(--rule)}
+.lv i.on{background:var(--ink)}
+.lv.none i{background:none;box-shadow:inset 0 0 0 1px var(--rule)}
+.list .it{border-top:1px solid var(--rule);padding:11px 16px;cursor:pointer}
+.list .it:first-child{border-top:0}
+.it .h{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--sub)}
+.it .h .lv{margin-left:auto}
+.it .l{margin-top:2px;font:16px/1.6 var(--text)}
+.it .l.one{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.it .m{font-size:14px;color:var(--sub)}
+.it .more{display:none;margin-top:8px;cursor:default}
+.it.open .more{display:block}
+.ctx{font:14px/1.6 var(--text);color:var(--sub);margin:8px 0}
+.tag{font-size:11px;color:var(--red);border:1px solid currentColor;border-radius:4px;padding:0 4px}
+.grid{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
+.grid button{padding:6px 0;font:600 15px/1.2 var(--text);border-radius:8px}
+.grid button small{display:block;font:400 10px/1.3 var(--ui);color:var(--sub)}
+.grid button.has{background:var(--paper);border-color:transparent}
+.grid button.cur{border-color:var(--ink);box-shadow:inset 0 0 0 1px var(--ink)}
+.btns{display:flex;gap:10px;margin-top:12px}
+.btns>*{flex:1}
+label.btn{position:relative;display:flex;align-items:center;justify-content:center;border:1px solid var(--rule);border-radius:10px;padding:11px 14px;background:var(--card);cursor:pointer}
+.vh{position:absolute;width:1px;height:1px;opacity:0;overflow:hidden;pointer-events:none}
+.add{display:inline-flex;align-items:center;gap:8px;margin-top:10px;padding:8px 12px;font-weight:600}
+.add i{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border:1.5px solid currentColor;border-radius:50%;font:600 15px/1 var(--ui);font-style:normal}
+.sbox{border:1px solid var(--rule);border-radius:10px;padding:10px 12px 6px;margin-top:12px}
+.sh{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+.num{font:600 18px/1 var(--text)}
+.sbox>textarea{margin-bottom:8px}
+.wbox{border-top:1px solid var(--rule);margin-top:10px;padding-top:10px}
+.wr{display:flex;align-items:center;gap:6px;margin-bottom:6px}
+.wr .num{min-width:2.4em;font-size:15px}
+.wr select{padding:6px 2px}
+.wr input{flex:1;min-width:0}
+.ws{margin-top:6px;font-size:13px}
+.ws .msg{margin-bottom:4px;color:var(--sub)}
+.ws.bad .msg{color:var(--red)}
+.wf{text-align:right}
+.lnk{background:none;border:0;padding:6px 2px;font-size:13px;color:var(--sub);text-decoration:underline;text-underline-offset:3px}
+.lnk.warn{color:var(--red)}
+</style>
+</head>
+<body>
+<main id="app"></main>
+<script>
+'use strict';
+/* ===== 保存（この端末のブラウザ内だけ） ===== */
+const K = {d: 'duoApp:data', p: 'duoApp:prog', u: 'duoApp:ui'};
+const NSEC = 45;
+function load(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } }
+function store(k, v) {
+  try { localStorage.setItem(k, JSON.stringify(v)); return true; }
+  catch (e) { alert('保存できませんでした。端末の空き容量を確認してください。'); return false; }
+}
+// sec[番号] = {s: [{id, en, ja, w: [{id, w, k: 'w'単語 / 'i'熟語, p: 品詞, ja: 意味, f: 英文中の形（手動指定）}]}]}
+let DB = load(K.d, {v: 2, nid: 1, sec: {}});
+let PG = load(K.p, {s: {}, w: {}}); // id → [習熟度0〜5, 正解・覚えた, 不正解・まだ]
+let UI = load(K.u, {a: 1, b: NSEC});
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
+// 貼り付け入力の頃の形式を今の形式に移す（習熟度も引き継ぐ）
+function migrate() {
+  if (!DB.sec) DB.sec = {};
+  if (DB.v === 2) return false;
+  const np = {s: {}, w: {}}, op = PG || {};
+  DB.nid = DB.nid || 1;
+  for (const sec of Object.keys(DB.sec)) DB.sec[sec].s.forEach((s, i) => {
+    const ok = sec + '-' + (i + 1);
+    s.id = 's' + DB.nid++; if (op.s && op.s[ok]) np.s[s.id] = op.s[ok];
+    for (const w of s.w) {
+      const wk = ok + '-' + w.n, m = String(w.ja || '').match(/^[（(](名|動|形|副|前|接|代|助|間|熟)[）)]/);
+      w.id = 'w' + DB.nid++; if (op.w && op.w[wk]) np.w[w.id] = op.w[wk];
+      w.k = (m && m[1] === '熟') || /\s/.test(String(w.w).replace(/…|\.{2,}/g, ' ').trim()) ? 'i' : 'w';
+      w.p = m && m[1] !== '熟' ? m[1] : '';
+      if (m) w.ja = w.ja.slice(m[0].length);
+      delete w.n;
+    }
+  });
+  DB.v = 2; PG = np;
+  return true;
+}
+if (migrate()) { store(K.d, DB); store(K.p, PG); }
+
+/* ===== 表記の正規化 ===== */
+const PH = /…|\.{2,}|・{2,}|‥|~|〜|～/g; // 「…」＝文が続く部分。照合・解答では無視する
+function phNorm(s) { return String(s).normalize('NFKC').replace(PH, ' … ').replace(/\s+/g, ' ').trim(); }
+function norm(s) {
+  return String(s).normalize('NFKC').toLowerCase().replace(/[’‘`´]/g, "'").replace(PH, ' ')
+    .replace(/[^a-z0-9'\- ]+/g, ' ').replace(/\s+/g, ' ').trim();
+}
+// ( ) は省略可、a/b はどちらでも可として表記を展開
+function variants(h) {
+  let vs = [phNorm(h)];
+  for (let g = 0; g < 4; g++) {
+    let hit = false; const nv = [];
+    for (const v of vs) {
+      const m = v.match(/\(([^()]*)\)/);
+      if (!m) { nv.push(v); continue; }
+      hit = true; nv.push(v.replace(m[0], ' ' + m[1] + ' '), v.replace(m[0], ' '));
+    }
+    vs = nv; if (!hit) break;
+  }
+  const out = [];
+  for (const v of vs) {
+    let acc = [''];
+    for (const t of v.split(/\s+/).filter(Boolean)) {
+      const alts = t.includes('/') ? t.split('/').filter(Boolean) : [t], nx = [];
+      for (const a of acc) for (const x of alts) nx.push(a ? a + ' ' + x : x);
+      acc = nx.slice(0, 32);
+    }
+    out.push(...acc);
+  }
+  return [...new Set(out.map(x => x.replace(/\s+/g, ' ').trim()).filter(Boolean))];
+}
+function answers(h) { return [...new Set(variants(h).map(norm).filter(Boolean))]; }
+
+/* ===== 英文中の位置を探す（活用形も推定） ===== */
+function toks(s) {
+  const out = [], re = /[A-Za-z0-9]+(?:['’\-][A-Za-z0-9]+)*/g; let m;
+  while ((m = re.exec(s))) out.push({t: m[0].toLowerCase().replace(/’/g, "'"), s: m.index, e: m.index + m[0].length});
+  return out;
+}
+const BE = new Set('be am is are was were been being'.split(' '));
+const POSS = new Set("my your his her its our their one's".split(' '));
+const REFL = new Set('myself yourself himself herself itself ourselves yourselves themselves oneself'.split(' '));
+const IRR = {arise:'arose arisen',awake:'awoke awoken',bear:'bore borne born',beat:'beaten',begin:'began begun',bend:'bent',bind:'bound',bite:'bit bitten',bleed:'bled',blow:'blew blown',break:'broke broken',breed:'bred',bring:'brought',build:'built',burn:'burnt',buy:'bought',catch:'caught',choose:'chose chosen',cling:'clung',come:'came',creep:'crept',deal:'dealt',dig:'dug',do:'did done',draw:'drew drawn',dream:'dreamt',drink:'drank drunk',drive:'drove driven',dwell:'dwelt',eat:'ate eaten',fall:'fell fallen',feed:'fed',feel:'felt',fight:'fought',find:'found',flee:'fled',fling:'flung',fly:'flew flown',forbid:'forbade forbidden',freeze:'froze frozen',get:'got gotten',give:'gave given',go:'went gone',grind:'ground',grow:'grew grown',hang:'hung',have:'had has',hear:'heard',hide:'hid hidden',hold:'held',keep:'kept',kneel:'knelt',know:'knew known',lay:'laid',lead:'led',lean:'leant',leap:'leapt',learn:'learnt',leave:'left',lend:'lent',lie:'lay lain lying',light:'lit',lose:'lost',make:'made',mean:'meant',meet:'met',pay:'paid',prove:'proven',ride:'rode ridden',ring:'rang rung',rise:'rose risen',run:'ran',say:'said',see:'saw seen',seek:'sought',sell:'sold',send:'sent',sew:'sewn',shake:'shook shaken',shine:'shone',shoot:'shot',show:'shown',shrink:'shrank shrunk',sing:'sang sung',sink:'sank sunk',sit:'sat',slay:'slew slain',sleep:'slept',slide:'slid',smell:'smelt',sow:'sown',speak:'spoke spoken',speed:'sped',spell:'spelt',spend:'spent',spill:'spilt',spin:'spun',spit:'spat',spoil:'spoilt',spring:'sprang sprung',stand:'stood',steal:'stole stolen',stick:'stuck',sting:'stung',stink:'stank stunk',stride:'strode stridden',strike:'struck stricken',string:'strung',strive:'strove striven',swear:'swore sworn',sweep:'swept',swell:'swollen',swim:'swam swum',swing:'swung',take:'took taken',teach:'taught',tear:'tore torn',tell:'told',think:'thought',throw:'threw thrown',tread:'trod trodden',wake:'woke woken',wear:'wore worn',weave:'wove woven',weep:'wept',win:'won',wind:'wound',wring:'wrung',write:'wrote written',good:'better best',well:'better best',bad:'worse worst',ill:'worse worst',far:'farther farthest further furthest',little:'less least',many:'more most',much:'more most',child:'children',man:'men',woman:'women',person:'people',foot:'feet',tooth:'teeth',goose:'geese',mouse:'mice',criterion:'criteria',phenomenon:'phenomena'};
+const FC = new Map();
+function forms(w) {
+  let f = FC.get(w); if (f) return f;
+  f = new Set([w]); const add = x => f.add(x);
+  for (const x of ['s', 'es', 'ed', 'd', 'ing', 'er', 'est', 'r', 'st', "'s", "s'"]) add(w + x);
+  if (w.endsWith('e')) for (const x of ['ing', 'ed', 'er', 'est']) add(w.slice(0, -1) + x);
+  if (/[^aeiou]y$/.test(w)) for (const x of ['ies', 'ied', 'ier', 'iest']) add(w.slice(0, -1) + x);
+  if (w.endsWith('ie')) add(w.slice(0, -2) + 'ying');
+  if (/(^|[^aeiou])[aeiou][^aeiouwxy]$/.test(w)) for (const x of ['ed', 'ing', 'er', 'est']) add(w + w.slice(-1) + x);
+  if (w.endsWith('c')) { add(w + 'ked'); add(w + 'king'); }
+  if (w.endsWith('fe')) add(w.slice(0, -2) + 'ves'); else if (w.endsWith('f')) add(w.slice(0, -1) + 'ves');
+  if (w.endsWith('is')) add(w.slice(0, -2) + 'es');
+  if (w.endsWith('us')) add(w.slice(0, -2) + 'i');
+  if (/(um|on)$/.test(w)) add(w.slice(0, -2) + 'a');
+  for (const b in IRR) if (w === b || (w.length - b.length >= 2 && w.endsWith(b))) {
+    const pre = w.slice(0, w.length - b.length);
+    for (const x of IRR[b].split(' ')) add(pre + x);
+  }
+  FC.set(w, f); return f;
+}
+function wmatch(t, p, loose) {
+  if (t === p) return true;
+  if (!loose) return false;
+  if (p === 'be') return BE.has(t);
+  if (p === "one's") return POSS.has(t);
+  if (p === 'oneself') return REFL.has(t);
+  return forms(p).has(t);
+}
+function mparts(T, parts, pi, from, loose) {
+  if (pi === parts.length) return [];
+  const p = parts[pi];
+  for (let i = from; i + p.length <= T.length; i++) {
+    let ok = true;
+    for (let k = 0; k < p.length && ok; k++) ok = wmatch(T[i + k].t, p[k], loose);
+    if (!ok) continue;
+    const r = mparts(T, parts, pi + 1, i + p.length, loose);
+    if (r) return [[i, i + p.length - 1]].concat(r);
+  }
+  return null;
+}
+// 見出し語（または手動で指定した形）の英文中の位置 → {rg: [[開始, 終了]...], ans: 英文中の形}
+function locate(en, pat, exact) {
+  const T = toks(en || '');
+  const vs = variants(pat || '').map(v => v.split('…').map(x => toks(x).map(o => o.t)).filter(x => x.length)).filter(x => x.length);
+  for (const loose of exact ? [false] : [false, true]) for (const parts of vs) {
+    const r = mparts(T, parts, 0, 0, loose);
+    if (r) { const rg = r.map(([a, b]) => [T[a].s, T[b].e]); return {rg, ans: rg.map(([s, e]) => en.slice(s, e)).join(' ')}; }
+  }
+  return null;
+}
+
+/* ===== 和訳の表示 ===== */
+// 見出し語の訳と、派生語（全角スペースのあとの英字から始まる部分）を分ける
+const RELRE = /\u3000+(?=[A-Za-z])|[ \t]+(?=[A-Za-z][^（(\u3000\n]*[（(])/;
+function splitM(t) {
+  t = String(t || '').trim();
+  const m = t.match(RELRE);
+  if (!m) return [t, []];
+  return [t.slice(0, m.index).trim(), t.slice(m.index).split(new RegExp(RELRE.source, 'g')).map(x => x.trim()).filter(Boolean)];
+}
+const POSRE = /[（(](動|名|形|副|前|接|代|助|熟|自|他|間|冠|数)[）)]/g;
+function posify(s) { return esc(s).replace(POSRE, '<span class="pos">$1</span>'); }
+function wlabel(w) { return (w.k === 'i' ? '<span class="pos">熟語</span>' : '') + (w.p ? `<span class="pos">${esc(w.p)}</span>` : ''); }
+function meanHTML(t, red, pre) {
+  const [main, rel] = splitM(t);
+  let h = `<div class="mean${red ? ' redink' : ''}">${pre || ''}${posify(main)}</div>`;
+  if (rel.length) h += '<ul class="rel">' + rel.map(r => {
+    const m = r.match(/^([A-Za-z][A-Za-z'’\- …~]*?)(?=[（(])(.*)$/);
+    return '<li>' + (m ? `<span class="w">${esc(m[1])}</span>${posify(m[2])}` : posify(r)) + '</li>';
+  }).join('') + '</ul>';
+  return h;
+}
+
+/* ===== データ・習熟度 ===== */
+let NUM = null; // 通し番号：Section 1 から順に、英文と単語をそれぞれ数える
+function num() {
+  if (NUM) return NUM;
+  const sn = new Map(), wn = new Map(); let a = 0, b = 0;
+  for (let i = 1; i <= NSEC; i++) { const d = DB.sec[i]; if (d) for (const s of d.s) { sn.set(s.id, ++a); for (const w of s.w) wn.set(w.id, ++b); } }
+  return (NUM = {sn, wn});
+}
+function secs(a, b) { const r = []; for (let i = Math.min(a, b); i <= Math.max(a, b); i++) if (DB.sec[i]) r.push(i); return r; }
+function sents(a, b) {
+  const N = num(), r = [];
+  for (const sec of secs(a, b)) for (const s of DB.sec[sec].s) if ((s.en || '').trim()) r.push({sec, key: s.id, no: N.sn.get(s.id), s});
+  return r;
+}
+function words(a, b) {
+  const N = num(), r = [];
+  for (const sec of secs(a, b)) for (const s of DB.sec[sec].s) for (const w of s.w) if ((w.w || '').trim()) r.push({sec, key: w.id, no: N.wn.get(w.id), s, w});
+  return r;
+}
+const LOC = new Map();
+function loc(x) {
+  if (!LOC.has(x.key)) { const f = (x.w.f || '').trim(); LOC.set(x.key, locate(x.s.en, f || x.w.w, !!f)); }
+  return LOC.get(x.key);
+}
+function lv(k, key) { const p = PG[k][key]; return p ? p[0] : -1; }
+function mark(k, key, good) {
+  const p = PG[k][key] || [0, 0, 0];
+  p[0] = good ? Math.min(5, p[0] + 1) : Math.max(0, p[0] - 1);
+  p[good ? 1 : 2]++;
+  PG[k][key] = p; store(K.p, PG);
+}
+function bar(l) {
+  let h = `<span class="lv${l < 0 ? ' none' : ''}" role="img" aria-label="習熟度 ${l < 0 ? '未学習' : l}">`;
+  for (let i = 0; i < 5; i++) h += i < l ? '<i class="on"></i>' : '<i></i>';
+  return h + '</span>';
+}
+
+/* ===== 画面 ===== */
+let app, VIEW = 'home', Q = null, LT = 's', DSEC = null;
+const $ = s => document.querySelector(s);
+const MT = {1: '英文 → 和訳', 2: '虫食い', 3: '単語 → 和訳', 4: '和訳 → 単語'};
+const MD = {1: 'カードで確認', 2: '入力して判定', 3: 'カードで確認', 4: '入力して判定'};
+const NOAUTO = 'autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"';
+
+function go(v) { if (saveT) saveNow(); VIEW = v; render(); window.scrollTo(0, 0); }
+function render() { ({home: vHome, quiz: vQuiz, list: vList, data: vData})[VIEW](); }
+function topbar(title, right) { return `<div class="bar"><button class="back" data-act="home">‹ 戻る</button><h2>${title}</h2>${right ? `<span class="prog">${right}</span>` : ''}</div>`; }
+function secOpts(sel) { let h = ''; for (let i = 1; i <= NSEC; i++) h += `<option value="${i}"${i === sel ? ' selected' : ''}>${i}</option>`; return h; }
+function rangeText() { const a = Math.min(UI.a, UI.b), b = Math.max(UI.a, UI.b); return a === b ? `Section ${a}` : `Section ${a}〜${b}`; }
+
+// ホーム
+function vHome() {
+  const S = sents(UI.a, UI.b), W = words(UI.a, UI.b);
+  const n = {1: S.length, 2: W.filter(loc).length, 3: W.length, 4: W.length};
+  let modes = '';
+  for (let m = 1; m <= 4; m++) modes += `<button data-act="q" data-m="${m}"${n[m] ? '' : ' disabled'}><span class="n">${m}</span><span class="t">${MT[m]}</span><span class="d">${MD[m]}</span></button>`;
+  app.innerHTML = `<h1>DUO 単語帳</h1>
+<div class="range">Section <select id="ra" aria-label="開始セクション">${secOpts(UI.a)}</select>〜<select id="rb" aria-label="終了セクション">${secOpts(UI.b)}</select><button class="sm" data-act="all">全範囲</button></div>
+<p class="cnt">英文${S.length}文、単語${W.length}語</p>
+<div class="panel modes">${modes}</div>
+<div class="row"><button data-act="list" data-t="s">英文一覧</button><button data-act="list" data-t="w">単語一覧</button></div>
+<button class="plain" data-act="data">データ管理</button>
+${Object.keys(DB.sec).length ? '' : '<p class="note">まず「データ管理」で各セクションの英文と単語を入力してください。</p>'}`;
+}
+
+// 出題
+function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+function startQuiz(m) {
+  let items = m === 1 ? sents(UI.a, UI.b) : words(UI.a, UI.b);
+  if (m === 2) items = items.filter(loc);
+  if (!items.length) return;
+  Q = {m, items: shuffle(items), i: 0, st: 0, ok: 0, ng: 0};
+  go('quiz'); focusAns();
+}
+function cloze(en, rg, filled) {
+  let h = '', p = 0;
+  rg.forEach(([s, e], k) => {
+    h += esc(en.slice(p, s)) + (filled ? `<span class="fill">${esc(en.slice(s, e))}</span>` : `<span class="patch">${rg.length > 1 ? k + 1 : ''}</span>`);
+    p = e;
+  });
+  return h + esc(en.slice(p));
+}
+function vQuiz() {
+  const it = Q.items[Q.i], card = Q.m === 1 || Q.m === 3;
+  if (!it) {
+    app.innerHTML = topbar(MT[Q.m]) + `<div class="panel pad done"><p class="big tx">一巡しました</p><p class="sub">${card ? '覚えた' : '正解'} ${Q.ok}　${card ? 'まだ' : '不正解'} ${Q.ng}</p><div class="btns"><button data-act="home">戻る</button><button class="pri" data-act="again">もう一度</button></div></div>`;
+    return;
+  }
+  const kind = Q.m === 1 ? 's' : 'w';
+  let body;
+  if (Q.m === 1) body = `<p class="prompt tx">${esc(it.s.en)}</p>`;
+  else if (Q.m === 3) body = `<p class="prompt word tx">${esc(it.w.w)}</p>`;
+  else if (Q.m === 2) {
+    const L = loc(it);
+    body = `<p class="prompt tx" id="cz">${cloze(it.s.en, L.rg)}</p><p class="hint">${esc(it.s.ja)}</p>` +
+      (L.rg.length > 1 ? `<p class="note tight">空欄が${L.rg.length}か所あります。順に空白で区切って入力してください。</p>` : '');
+  } else body = `<p class="prompt ja tx">${wlabel(it.w)}${posify(splitM(it.w.ja)[0] || it.w.ja)}</p>`;
+  const ans = Q.m === 1 ? `<p class="tx redink">${esc(it.s.ja)}</p>` : Q.m === 3 ? meanHTML(it.w.ja, true, wlabel(it.w)) : '';
+  const ctl = card
+    ? `<div class="cover" id="cv" data-act="reveal"><div class="under" aria-hidden="true">${ans}</div><div class="sheet"></div></div><div id="ctl"><button class="pri wide" data-act="reveal">和訳を表示</button></div>`
+    : `<div class="ansrow"><input id="ans" class="tx" type="text" ${NOAUTO} enterkeyhint="go" placeholder="答えを入力"><button class="pri" id="jb" data-act="judge">判定</button></div><div id="res"></div>`;
+  app.innerHTML = topbar(MT[Q.m], `${Q.i + 1} / ${Q.items.length}`) +
+    `<div class="panel pad"><div class="meta"><span>${kind === 'w' ? '単語' : '英文'} ${it.no}　Section ${it.sec}</span><span id="lvq">${bar(lv(kind, it.key))}</span></div>${body}${ctl}</div>`;
+}
+function focusAns() { const a = $('#ans'); if (a) a.focus(); }
+function reveal() {
+  if (Q.st) return;
+  const cv = $('#cv'); cv.classList.add('open'); cv.querySelector('.under').removeAttribute('aria-hidden');
+  $('#ctl').innerHTML = '<div class="self"><button data-act="self" data-v="0">まだ</button><button class="pri" data-act="self" data-v="1">覚えた</button></div>';
+  Q.st = 1;
+}
+function selfMark(good) { const it = Q.items[Q.i]; mark(Q.m === 1 ? 's' : 'w', it.key, good); if (good) Q.ok++; else Q.ng++; next(); }
+function next() { Q.i++; Q.st = 0; render(); window.scrollTo(0, 0); focusAns(); }
+function judge() {
+  if (Q.st) return;
+  const it = Q.items[Q.i], raw = $('#ans').value.trim(), v = norm(raw);
+  const yours = `<div class="small sub">あなたの答え：<span class="tx">${esc(raw || '（空欄）')}</span></div>`;
+  let good, h;
+  if (Q.m === 2) {
+    const L = loc(it); good = !!v && v === norm(L.ans);
+    $('#cz').innerHTML = cloze(it.s.en, L.rg, true);
+    h = (good ? '' : yours + `<div>正解：<span class="tx redink b">${esc(L.ans)}</span></div>`) + `<div class="wd tx b">${esc(it.w.w)}</div>${meanHTML(it.w.ja, false, wlabel(it.w))}`;
+  } else {
+    good = !!v && answers(it.w.w).includes(v);
+    h = (good ? '' : yours) + `<div class="wd tx b redink">${esc(it.w.w)}</div>${meanHTML(it.w.ja, false, wlabel(it.w))}`;
+  }
+  mark('w', it.key, good); if (good) Q.ok++; else Q.ng++;
+  $('#lvq').innerHTML = bar(lv('w', it.key));
+  $('#res').innerHTML = `<div class="mark">${good ? '○ 正解' : '× 不正解'}</div>` + h;
+  const jb = $('#jb'); jb.textContent = '次へ'; jb.dataset.act = 'next';
+  Q.st = 1;
+}
+
+// 一覧
+function vList() {
+  let h = '';
+  if (LT === 'w') for (const x of words(UI.a, UI.b)) h += `<div class="it" data-act="tog"><div class="h"><span>${x.no}</span>${loc(x) ? '' : '<span class="tag">文中未検出</span>'}${bar(lv('w', x.key))}</div><div class="l one"><span class="b">${esc(x.w.w)}</span>　<span class="m">${wlabel(x.w)}${posify(splitM(x.w.ja)[0])}</span></div><div class="more">${meanHTML(x.w.ja, false, wlabel(x.w))}<p class="ctx">${esc(x.s.en)}</p><button class="sm" data-act="goedit" data-s="${x.sec}" data-id="${x.key}">編集</button></div></div>`;
+  else for (const x of sents(UI.a, UI.b)) h += `<div class="it" data-act="tog"><div class="h"><span>${x.no}</span>${bar(lv('s', x.key))}</div><div class="l">${esc(x.s.en)}</div><div class="more"><p class="tx small">${esc(x.s.ja)}</p><button class="sm" data-act="goedit" data-s="${x.sec}" data-id="${x.key}">編集</button></div></div>`;
+  app.innerHTML = topbar(LT === 'w' ? '単語一覧' : '英文一覧', rangeText()) +
+    (h ? `<div class="panel list">${h}</div>` : '<p class="note">この範囲にはまだデータがありません。「データ管理」で入力してください。</p>');
+}
+
+// データ管理：Sectionを選ぶ → 英文を追加 → 英文・和訳 → 単語を追加 → 分類・品詞・単語・意味
+const POS = ['', '名', '動', '形', '副', '前', '接', '代', '助', '間'];
+let IDX = new Map(), saveT = null;
+function opts(list, cur) { return list.map(([v, t]) => `<option value="${v}"${v === cur ? ' selected' : ''}>${t}</option>`).join(''); }
+function wordBox(w, N) {
+  return `<div class="wbox" data-wid="${w.id}"><div class="wr"><span class="num tx">${N.wn.get(w.id)}</span>` +
+    `<select data-id="${w.id}" data-f="k" aria-label="分類">${opts([['w', '単語'], ['i', '熟語']], w.k)}</select>` +
+    `<select data-id="${w.id}" data-f="p" aria-label="品詞">${opts(POS.map(p => [p, p || '―']), w.p)}</select>` +
+    `<input class="tx" data-id="${w.id}" data-f="w" value="${esc(w.w)}" placeholder="英単語・熟語" aria-label="英単語・熟語" ${NOAUTO}></div>` +
+    `<textarea class="tx" rows="2" data-id="${w.id}" data-f="ja" placeholder="意味" aria-label="意味">${esc(w.ja)}</textarea>` +
+    `<div class="ws" id="ws-${w.id}" hidden><div class="msg"></div><input class="tx" data-id="${w.id}" data-f="f" value="${esc(w.f || '')}" placeholder="英文中の形（例：took … into account）" aria-label="英文中の形" ${NOAUTO}></div>` +
+    `<div class="wf"><button class="lnk" data-act="delW" data-id="${w.id}">この単語を削除</button></div></div>`;
+}
+function senBox(s, N) {
+  return `<div class="sbox" data-sid="${s.id}"><div class="sh"><span class="num tx">${N.sn.get(s.id)}</span><button class="lnk warn" data-act="delS" data-id="${s.id}">この英文を削除</button></div>` +
+    `<textarea class="tx" rows="2" data-id="${s.id}" data-f="en" placeholder="英文" aria-label="英文" ${NOAUTO}>${esc(s.en)}</textarea>` +
+    `<textarea class="tx" rows="2" data-id="${s.id}" data-f="ja" placeholder="和訳" aria-label="和訳">${esc(s.ja)}</textarea>` +
+    `<button class="add" data-act="addW" data-id="${s.id}">単語を追加<i aria-hidden="true">＋</i></button>` +
+    s.w.map(w => wordBox(w, N)).join('') + '</div>';
+}
+function nextEmpty() { for (let i = 1; i <= NSEC; i++) if (!DB.sec[i] || !DB.sec[i].s.length) return i; return 1; }
+function vData() {
+  if (!DSEC) DSEC = UI.ds || nextEmpty();
+  const N = num(), S = DB.sec[DSEC] ? DB.sec[DSEC].s : [];
+  IDX = new Map();
+  for (const s of S) { IDX.set(s.id, {t: 's', o: s}); for (const w of s.w) IDX.set(w.id, {t: 'w', o: w, s}); }
+  let g = '';
+  for (let i = 1; i <= NSEC; i++) { const n = DB.sec[i] ? DB.sec[i].s.length : 0; g += `<button class="${n ? 'has' : ''}${i === DSEC ? ' cur' : ''}" data-act="dpick" data-s="${i}">${i}<small>${n ? n + '文' : '−'}</small></button>`; }
+  app.innerHTML = topbar('データ管理') +
+    `<div class="panel pad"><div class="range">Section <select id="dsec" aria-label="セクション">${secOpts(DSEC)}</select><span class="small sub">英文${S.length}文、単語${S.reduce((a, s) => a + s.w.length, 0)}語</span></div>
+<button class="add" data-act="addS">英文を追加<i aria-hidden="true">＋</i></button>
+${S.map(s => senBox(s, N)).join('') || '<p class="note">「英文を追加」で、このSectionの最初の英文を入れてください。</p>'}</div>
+<div class="panel pad"><h3 class="hd">入力済みのセクション</h3><div class="grid">${g}</div></div>
+<div class="panel pad"><h3 class="hd">バックアップ</h3>
+<div class="btns"><button data-act="exp">書き出し</button><label class="btn">読み込み<input type="file" id="impf" class="vh" accept=".json,application/json,text/plain"></label></div>
+<p class="note">入力は自動で保存されます。データと習熟度はこの端末の中にだけあるので、ときどき書き出して「ファイル」に保存してください。</p></div>
+<div class="panel pad"><button class="wide warn" data-act="ddel"${S.length ? '' : ' disabled'}>Section ${DSEC} のデータをすべて削除</button></div>`;
+  app.querySelectorAll('textarea').forEach(grow);
+  for (const s of S) for (const w of s.w) wstat(w, s);
+}
+function grow(t) { t.style.height = 'auto'; t.style.height = t.scrollHeight + 2 + 'px'; }
+// 単語が英文中に見つからない時だけ「英文中の形」の欄を出す
+function wstat(w, s) {
+  const box = document.getElementById('ws-' + w.id); if (!box) return;
+  const f = (w.f || '').trim(), hw = (w.w || '').trim(), en = (s.en || '').trim();
+  const r = hw && en ? locate(en, f || hw, !!f) : null;
+  box.hidden = !(hw && en && (!r || f));
+  box.classList.toggle('bad', !r);
+  box.querySelector('.msg').innerHTML = r ? `虫食いの箇所：<span class="tx redink b">${esc(r.ans)}</span>` : '英文中に見つかりません。英文中の形を入れてください（離れた部分は … で区切ります）。';
+}
+function onInput(e) {
+  const t = e.target, id = t.dataset ? t.dataset.id : null, f = t.dataset ? t.dataset.f : null, x = id ? IDX.get(id) : null;
+  if (!x || !f) return;
+  x.o[f] = t.value;
+  if (f === 'f' && !t.value.trim()) delete x.o.f;
+  if (t.tagName === 'TEXTAREA') grow(t);
+  saveSoon();
+  if (x.t === 's' && f === 'en') x.o.w.forEach(w => wstat(w, x.o));
+  if (x.t === 'w' && (f === 'w' || f === 'f')) wstat(x.o, x.s);
+}
+function saveSoon() { clearTimeout(saveT); saveT = setTimeout(saveNow, 400); }
+function saveNow() { clearTimeout(saveT); saveT = null; LOC.clear(); store(K.d, DB); }
+function focusEl(sel) { const el = app.querySelector(sel); if (el) { el.focus(); el.scrollIntoView({block: 'center'}); } }
+function keepScroll(fn) { const y = window.scrollY; fn(); window.scrollTo(0, y); }
+function addS() {
+  const d = DB.sec[DSEC] || (DB.sec[DSEC] = {s: []}), s = {id: 's' + DB.nid++, en: '', ja: '', w: []};
+  d.s.push(s); NUM = null; saveNow(); keepScroll(vData); focusEl(`[data-id="${s.id}"][data-f="en"]`);
+}
+function addW(sid) {
+  const x = IDX.get(sid); if (!x) return;
+  const w = {id: 'w' + DB.nid++, w: '', k: 'w', p: '', ja: ''};
+  x.o.w.push(w); NUM = null; saveNow(); keepScroll(vData); focusEl(`[data-id="${w.id}"][data-f="w"]`);
+}
+function delS(id) {
+  const x = IDX.get(id), d = DB.sec[DSEC]; if (!x || !d) return;
+  if ((x.o.en || x.o.ja || x.o.w.length) && !confirm('この英文と、その単語を削除します。')) return;
+  d.s.splice(d.s.indexOf(x.o), 1); NUM = null; saveNow(); keepScroll(vData);
+}
+function delW(id) {
+  const x = IDX.get(id); if (!x) return;
+  if ((x.o.w || x.o.ja) && !confirm('この単語を削除します。')) return;
+  x.s.w.splice(x.s.w.indexOf(x.o), 1); NUM = null; saveNow(); keepScroll(vData);
+}
+function ddel() {
+  if (!DB.sec[DSEC] || !DB.sec[DSEC].s.length || !confirm(`Section ${DSEC} のデータをすべて削除します。`)) return;
+  delete DB.sec[DSEC]; NUM = null; saveNow(); vData();
+}
+function pickSec(n) { if (saveT) saveNow(); DSEC = n; UI.ds = n; store(K.u, UI); vData(); window.scrollTo(0, 0); }
+function goEdit(sec, id) { DSEC = +sec; UI.ds = DSEC; store(K.u, UI); go('data'); focusEl(`[data-sid="${id}"] textarea, [data-wid="${id}"] input[data-f="w"]`); }
+function exportData() {
+  const d = new Date(), p = x => String(x).padStart(2, '0');
+  const name = `duo-backup-${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}.json`;
+  const txt = JSON.stringify({app: 'duo3', v: 2, data: DB, prog: PG});
+  const dl = () => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([txt], {type: 'application/json'})); a.download = name; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 2000); };
+  try {
+    if (navigator.canShare) for (const type of ['application/json', 'text/plain']) {
+      const f = new File([txt], name, {type});
+      if (navigator.canShare({files: [f]})) { navigator.share({files: [f]}).catch(e => { if (e.name !== 'AbortError') dl(); }); return; }
+    }
+  } catch (e) { /* 共有できない環境ではダウンロードにする */ }
+  dl();
+}
+async function importData(file) {
+  let o = null;
+  try { o = JSON.parse(await file.text()); } catch (e) { o = null; }
+  if (!o || o.app !== 'duo3' || !o.data || typeof o.data.sec !== 'object') { alert('読み込めませんでした。このアプリで書き出したファイルを選んでください。'); return; }
+  if (!confirm('今のデータと習熟度を、このファイルの内容で置き換えます。')) return;
+  DB = o.data; PG = {s: (o.prog && o.prog.s) || {}, w: (o.prog && o.prog.w) || {}};
+  migrate(); NUM = null; LOC.clear(); store(K.d, DB); store(K.p, PG); DSEC = null; vData(); alert('読み込みました。');
+}
+
+/* ===== 操作 ===== */
+function onClick(e) {
+  const b = e.target.closest('[data-act]'); if (!b || b.disabled) return;
+  const d = b.dataset;
+  switch (d.act) {
+    case 'home': go('home'); break;
+    case 'all': UI.a = 1; UI.b = NSEC; store(K.u, UI); vHome(); break;
+    case 'q': startQuiz(+d.m); break;
+    case 'again': startQuiz(Q.m); break;
+    case 'reveal': reveal(); break;
+    case 'self': selfMark(d.v === '1'); break;
+    case 'judge': judge(); break;
+    case 'next': next(); break;
+    case 'list': LT = d.t; go('list'); break;
+    case 'tog': if (!e.target.closest('.more')) b.classList.toggle('open'); break;
+    case 'goedit': goEdit(d.s, d.id); break;
+    case 'data': DSEC = null; go('data'); break;
+    case 'dpick': pickSec(+d.s); break;
+    case 'addS': addS(); break;
+    case 'addW': addW(d.id); break;
+    case 'delS': delS(d.id); break;
+    case 'delW': delW(d.id); break;
+    case 'ddel': ddel(); break;
+    case 'exp': exportData(); break;
+  }
+}
+function onKey(e) {
+  if (e.target.id !== 'ans' || e.key !== 'Enter' || e.isComposing || e.keyCode === 229) return;
+  e.preventDefault();
+  if (Q.st) next(); else judge();
+}
+function onChange(e) {
+  const t = e.target;
+  if (t.dataset && t.dataset.f) onInput(e);
+  else if (t.id === 'ra' || t.id === 'rb') { UI[t.id === 'ra' ? 'a' : 'b'] = +t.value; store(K.u, UI); vHome(); }
+  else if (t.id === 'dsec') pickSec(+t.value);
+  else if (t.id === 'impf' && t.files && t.files[0]) { const f = t.files[0]; t.value = ''; importData(f); }
+}
+if (typeof document !== 'undefined') {
+  app = document.getElementById('app');
+  app.addEventListener('click', onClick); app.addEventListener('keydown', onKey);
+  app.addEventListener('change', onChange); app.addEventListener('input', onInput);
+  document.addEventListener('visibilitychange', () => { if (document.hidden && saveT) saveNow(); });
+  window.addEventListener('pagehide', () => { if (saveT) saveNow(); });
+  render();
+  if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
+  if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
+}
+</script>
+</body>
+</html>
