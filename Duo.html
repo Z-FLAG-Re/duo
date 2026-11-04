@@ -119,7 +119,11 @@ label.btn{position:relative;display:flex;align-items:center;justify-content:cent
 .addrow{display:flex;flex-wrap:wrap;gap:10px}
 #bulk{margin-top:10px}
 .sbox{border:1px solid var(--rule);border-radius:10px;padding:10px 12px 6px;margin-top:12px}
-.sh{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+.sh{display:flex;align-items:center;gap:10px;margin-bottom:6px}
+.sh .lnk{margin-left:auto}
+.sbox.min{padding:8px 12px;margin-top:8px}
+.sbox.min .sh{margin-bottom:0}
+.tog{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;padding:0;border-radius:50%;font:600 18px/1 var(--ui)}
 .num{font:600 18px/1 var(--text)}
 .sbox>textarea{margin-bottom:8px}
 .wbox{border-top:1px solid var(--rule);margin-top:10px;padding-top:10px}
@@ -130,7 +134,9 @@ label.btn{position:relative;display:flex;align-items:center;justify-content:cent
 .ws{margin-top:6px;font-size:13px}
 .ws .msg{margin-bottom:4px;color:var(--sub)}
 .ws.bad .msg{color:var(--red)}
-.wf{text-align:right}
+.wf{display:flex;align-items:center;gap:8px}
+.wf .lnk{margin-left:auto}
+.mv{padding:4px 14px;font-size:15px;line-height:1.3}
 .lnk{background:none;border:0;padding:6px 2px;font-size:13px;color:var(--sub);text-decoration:underline;text-underline-offset:3px}
 .lnk.warn{color:var(--red)}
 </style>
@@ -441,21 +447,28 @@ function vList() {
 const POS = [['', '―'], ['名', '名詞'], ['動', '動詞'], ['形', '形容詞'], ['副', '副詞'], ['前', '前置詞'], ['接', '接続詞'], ['助', '助動詞'], ['感', '感嘆詞'], ['構', '構文'], ['頭', '接頭語'], ['尾', '接尾語'], ['代', '代名詞'], ['定', '定型表現']];
 let IDX = new Map(), saveT = null;
 function opts(list, cur) { return list.map(([v, t]) => `<option value="${v}"${v === cur ? ' selected' : ''}>${t}</option>`).join(''); }
-function wordBox(w, N) {
+function wordBox(w, N, i, len) {
   return `<div class="wbox" data-wid="${w.id}"><div class="wr"><span class="num tx">${N.wn.get(w.id)}</span>` +
     `<select data-id="${w.id}" data-f="k" aria-label="分類">${opts([['w', '単語'], ['i', '熟語']], w.k)}</select>` +
     `<select data-id="${w.id}" data-f="p" aria-label="品詞">${opts(POS, w.p)}</select>` +
     `<input class="tx" data-id="${w.id}" data-f="w" value="${esc(w.w)}" placeholder="英単語・熟語" aria-label="英単語・熟語" ${NOAUTO}></div>` +
     `<textarea class="tx" rows="2" data-id="${w.id}" data-f="ja" placeholder="意味" aria-label="意味">${esc(w.ja)}</textarea>` +
     `<div class="ws" id="ws-${w.id}" hidden><div class="msg"></div><input class="tx" data-id="${w.id}" data-f="f" value="${esc(w.f || '')}" placeholder="英文中の形（例：took … into account）" aria-label="英文中の形" ${NOAUTO}></div>` +
-    `<div class="wf"><button class="lnk" data-act="delW" data-id="${w.id}">この単語を削除</button></div></div>`;
+    `<div class="wf"><button class="mv" data-act="mvW" data-id="${w.id}" data-d="-1" aria-label="上へ移動"${i ? '' : ' disabled'}>↑</button>` +
+    `<button class="mv" data-act="mvW" data-id="${w.id}" data-d="1" aria-label="下へ移動"${i < len - 1 ? '' : ' disabled'}>↓</button>` +
+    `<button class="lnk" data-act="delW" data-id="${w.id}">この単語を削除</button></div></div>`;
 }
+const OPEN = new Set(); // 展開している英文（それ以外は番号だけの最小化表示）
 function senBox(s, N) {
-  return `<div class="sbox" data-sid="${s.id}"><div class="sh"><span class="num tx">${N.sn.get(s.id)}</span><button class="lnk warn" data-act="delS" data-id="${s.id}">この英文を削除</button></div>` +
+  const open = OPEN.has(s.id);
+  const head = `<div class="sh"><span class="num tx">${N.sn.get(s.id)}</span><button class="tog" data-act="togS" data-id="${s.id}" aria-expanded="${open}" aria-label="${open ? '最小化する' : '展開する'}">${open ? '−' : '＋'}</button>` +
+    (open ? `<button class="lnk warn" data-act="delS" data-id="${s.id}">この英文を削除</button>` : '') + '</div>';
+  if (!open) return `<div class="sbox min" data-sid="${s.id}">${head}</div>`;
+  return `<div class="sbox" data-sid="${s.id}">${head}` +
     `<textarea class="tx" rows="2" data-id="${s.id}" data-f="en" placeholder="英文" aria-label="英文" ${NOAUTO}>${esc(s.en)}</textarea>` +
     `<textarea class="tx" rows="2" data-id="${s.id}" data-f="ja" placeholder="和訳" aria-label="和訳">${esc(s.ja)}</textarea>` +
     `<button class="add" data-act="addW" data-id="${s.id}">単語を追加<i aria-hidden="true">＋</i></button>` +
-    s.w.map(w => wordBox(w, N)).join('') + '</div>';
+    s.w.map((w, i) => wordBox(w, N, i, s.w.length)).join('') + '</div>';
 }
 function nextEmpty() { for (let i = 1; i <= NSEC; i++) if (!DB.sec[i] || !DB.sec[i].s.length) return i; return 1; }
 function vData() {
@@ -502,9 +515,20 @@ function saveSoon() { clearTimeout(saveT); saveT = setTimeout(saveNow, 400); }
 function saveNow() { clearTimeout(saveT); saveT = null; LOC.clear(); store(K.d, DB); }
 function focusEl(sel) { const el = app.querySelector(sel); if (el) { el.focus(); el.scrollIntoView({block: 'center'}); } }
 function keepScroll(fn) { const y = window.scrollY; fn(); window.scrollTo(0, y); }
+// 書き直した後も、sel の要素が画面の同じ位置に来るようにする
+function keepEl(sel, fn) { const a = app.querySelector(sel), t0 = a ? a.getBoundingClientRect().top : 0; fn(); const b = app.querySelector(sel); if (a && b) window.scrollBy(0, b.getBoundingClientRect().top - t0); }
+function togS(id) { if (OPEN.has(id)) OPEN.delete(id); else OPEN.add(id); keepEl(`[data-sid="${id}"]`, () => keepScroll(vData)); }
+// 単語を1つ上・下へ動かす（通し番号も並びに合わせて入れ替わる）
+function mvW(id, d) {
+  const x = IDX.get(id); if (!x || x.t !== 'w') return;
+  const a = x.s.w, i = a.indexOf(x.o), j = i + d;
+  if (j < 0 || j >= a.length) return;
+  [a[i], a[j]] = [a[j], a[i]];
+  NUM = null; saveNow(); keepEl(`[data-wid="${id}"]`, () => keepScroll(vData));
+}
 function addS() {
   const d = DB.sec[DSEC] || (DB.sec[DSEC] = {s: []}), s = {id: 's' + DB.nid++, en: '', ja: '', w: []};
-  d.s.push(s); NUM = null; saveNow(); keepScroll(vData); focusEl(`[data-id="${s.id}"][data-f="en"]`);
+  d.s.push(s); OPEN.add(s.id); NUM = null; saveNow(); keepScroll(vData); focusEl(`[data-id="${s.id}"][data-f="en"]`);
 }
 function addW(sid) {
   const x = IDX.get(sid); if (!x) return;
@@ -526,7 +550,10 @@ function ddel() {
   delete DB.sec[DSEC]; NUM = null; saveNow(); vData();
 }
 function pickSec(n) { if (saveT) saveNow(); DSEC = n; UI.ds = n; store(K.u, UI); vData(); window.scrollTo(0, 0); }
-function goEdit(sec, id) { DSEC = +sec; UI.ds = DSEC; store(K.u, UI); go('data'); focusEl(`[data-sid="${id}"] textarea, [data-wid="${id}"] input[data-f="w"]`); }
+function goEdit(sec, id) {
+  DSEC = +sec; UI.ds = DSEC; store(K.u, UI);
+  const d = DB.sec[DSEC], s = d && d.s.find(x => x.id === id || x.w.some(w => w.id === id)); if (s) OPEN.add(s.id);
+  go('data'); focusEl(`[data-sid="${id}"] textarea, [data-wid="${id}"] input[data-f="w"]`); }
 // まとめて貼り付け：写真のテキスト認識でコピーした文章から、英文・和訳・見出し語・意味を取り出す
 // テキスト認識は左右の段を混ぜて読むため、意味は派生語の綴り・品詞の記号・見出し語の位置を手がかりに単語ごとへ振り分ける
 const JPRE = /[ぁ-んァ-ヶ一-龠々]/;
@@ -767,12 +794,12 @@ function bulkImport() {
       for (const x of b.words) {
         const w = old.w.find(v => norm(v.w) === norm(x.hw)); if (!w) continue;
         if (!w.p && x.p) w.p = x.p;
-        if (!String(w.ja || '').trim() && x.ja) { w.ja = x.ja; fill++; }
+        if (!String(w.ja || '').trim() && x.ja) { w.ja = x.ja; fill++; OPEN.add(old.id); }
       }
       continue;
     }
     const s = {id: 's' + DB.nid++, en: b.en, ja: b.ja, w: b.words.map(x => ({id: 'w' + DB.nid++, w: x.hw, k: kindOf(x.hw), p: x.p, ja: x.ja}))};
-    d.s.push(s); ns++; nw += s.w.length; nm += s.w.filter(w => w.ja).length; if (!first) first = s.id;
+    d.s.push(s); OPEN.add(s.id); ns++; nw += s.w.length; nm += s.w.filter(w => w.ja).length; if (!first) first = s.id;
   }
   NUM = null; saveNow(); keepScroll(vData);
   const el = first && app.querySelector(`[data-sid="${first}"]`); if (el) el.scrollIntoView({block: 'start'});
@@ -830,6 +857,8 @@ function onClick(e) {
     case 'addW': addW(d.id); break;
     case 'delS': delS(d.id); break;
     case 'delW': delW(d.id); break;
+    case 'togS': togS(d.id); break;
+    case 'mvW': mvW(d.id, +d.d); break;
     case 'ddel': ddel(); break;
     case 'exp': exportData(); break;
   }
