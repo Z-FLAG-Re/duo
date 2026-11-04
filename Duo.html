@@ -531,36 +531,67 @@ function goEdit(sec, id) { DSEC = +sec; UI.ds = DSEC; store(K.u, UI); go('data')
 // テキスト認識は左右の段を混ぜて読むため、意味は派生語の綴り・品詞の記号・見出し語の位置を手がかりに単語ごとへ振り分ける
 const JPRE = /[ぁ-んァ-ヶ一-龠々]/;
 const HWRE = /^[A-Za-z0-9 .…'’\-()\/~〜～,!?]+$/;
-const POSRX = /^([名動形副前接助感構頭尾代定])(?![ぁ-んァ-ヶ一-龠々])/;   // 四角で囲まれた品詞の記号
-const JUNK = /^[\s　□口|・•]+/;                                      // □（チェック欄）などの読み取り
-const DASH = /^[━ーｰ\-－—―一]+\s*/;                                      // 「━」＝同じ単語の別の品詞
+const POSRX = /^([名動形副前接助感構頭尾代定])(?=[回口]|[^ぁ-んァ-ヶ一-龠々]|$)/;   // 四角で囲まれた品詞の記号
+const POSALT = {'图': '名', '図': '名', 'Z': '名', '#': '形'};                    // 派生語の後ろの品詞の記号の読み間違い
+const JUNK = /^[\s　□口|・•]+/;                                             // □（チェック欄）などの読み取り
+const DASH = /^[━ーｰ\-－—―一]+\s*/;                                             // 「━」＝同じ単語の別の品詞
 const PRON = /^[^ぁ-んァ-ヶ一-龠々]*[A-Za-z][^ぁ-んァ-ヶ一-龠々]*[（(](?=[^）)]*[ァ-ヶ])[ァ-ヶぁ-んー・\s]+[）)][\]］」』〕]?$/; // 発音
+const STOPW = new Set('of to in on at for the a an and or but with by from as into about'.split(' '));
+const NUMLN = /^[0-9０-９]{1,3}$/;                                              // 見出しの番号・ページ番号
 function kindOf(hw) { return /\s/.test(phNorm(hw).replace(/\([^)]*\)/g, ' ').replace(/…/g, ' ').replace(/\s+/g, ' ').trim()) ? 'i' : 'w'; }
 const deacc = x => x.normalize('NFD').replace(/[̀-ͯ]/g, '').normalize('NFC');
-function stemOf(hw) {
-  const t = toks(phNorm(hw).replace(/…/g, ' ')).map(o => o.t).filter(x => x.length > 1 && !['be', 'an', 'the', 'to', "one's", 'oneself'].includes(x));
-  const w = t[0] || '';
-  return w.length > 4 && /[ey]$/.test(w) ? w.slice(0, -1) : w;
-}
+function baseOf(hw) { return toks(phNorm(hw).replace(/…/g, ' ')).map(o => o.t).filter(x => x.length > 1 && !['be', 'an', 'the', 'to', "one's", 'oneself'].includes(x))[0] || ''; }
+function stemOf(b) { return b.length > 4 && /[ey]$/.test(b) ? b.slice(0, -1) : b; }
+function cleanHw(x) { return x.replace(/\.{2,}/g, '…').replace(/['’`´\d¹²³]+$/, '').replace(/\s+/g, ' ').trim(); }
 function opened(x) { let d = 0; for (const c of x) { if ('（([［【〔'.includes(c)) d++; else if ('）)]］】〕'.includes(c) && d) d--; } return d > 0; }
-function bare(x) { return /^[A-Za-zÀ-ɏ'’\-.… ]*[名動形副前接助感構頭尾代定]?$/.test(x.replace(JUNK, '').trim()); }
-// x が前の行 p の続きか（括弧の途中、閉じ括弧や②以降で始まる、英語の折り返し、単語や品詞だけの行の次）
-function cont(p, x) { return opened(p) || /^[）)\]］】〕」』②-⑳]/.test(x) || (/[A-Za-z0-9\/\-]$/.test(p) && /^[a-z]/.test(x)) || bare(p); }
-function posStart(x) { return POSRX.test(x.replace(JUNK, '')); }
-function dashPos(x) { const t = x.replace(JUNK, ''); return DASH.test(t) && POSRX.test(t.replace(DASH, '')); }
-// 派生語の行（respectful など）なら、どの見出し語のものかを返す
+// 派生語・関連語の行（respectful、in the original など）なら、どの見出し語のものかを返す
 function anchorOf(x, st) {
-  const m = deacc(x.replace(JUNK, '')).match(/^[A-Za-z][A-Za-z'’\-]*/); if (!m) return -1;
-  const t = m[0].toLowerCase(); let best = -1, bl = 0;
-  st.forEach((s, j) => { if (s.length >= 3 && s.length > bl && (t.startsWith(s) || (t.length > s.length && t.slice(1).startsWith(s)))) { best = j; bl = s.length; } });
+  const run = deacc(x.replace(JUNK, '')).match(/^[A-Za-z][A-Za-z'’\-]*(?:\s*(?:…|\.{2,})?\s*[A-Za-z][A-Za-z'’\-]*){0,3}/);
+  if (!run) return -1;
+  const ts = run[0].toLowerCase().match(/[a-z][a-z'’\-]*/g) || [];
+  let best = -1, bl = 0;
+  ts.forEach((t, ti) => st.forEach(({b, s}, j) => {
+    if (s.length < 3 || s.length <= bl) return;
+    if (t.startsWith(s) || (ti === 0 && t.length > s.length && t.slice(1).startsWith(s)) || (t.length >= 5 && b.startsWith(t))) { best = j; bl = s.length; }
+  }));
   return best;
 }
+function posOf(x) { const t = x.replace(JUNK, ''); const m = t.match(POSRX); return m ? m[1] : t[0] === '图' ? '名' : ''; }
+function dashPos(x) { const t = x.replace(JUNK, ''); return DASH.test(t) && !!posOf(t.replace(DASH, '')); }
+// 品詞だけの行、または派生語と品詞だけの行（次の行に意味が続く）
+function bare(p, st) {
+  const t = p.replace(JUNK, '').trim();
+  if (/^[名動形副前接助感構頭尾代定图]$/.test(t)) return true;
+  return anchorOf(p, st) >= 0 && /^[名動形副前接助感構頭尾代定图図#]?$/.test(t.replace(/[A-Za-zÀ-ɏ'’\-.…\s()（）\[\]［］~～]/g, ''));
+}
+// x が前の行 p の続きか（括弧の途中、閉じ括弧や②以降で始まる、英語の折り返し、品詞や派生語だけの行の次）
+function cont(p, x, st) { return opened(p) || /^[）)\]］】〕」』②-⑳]/.test(x) || (/[A-Za-z0-9\/\-]$/.test(p) && /^[a-z]/.test(x)) || bare(p, st); }
 function joinL(L) { return L.reduce((a, x) => a + (a && /[A-Za-z0-9]$/.test(a) && /^[A-Za-z]/.test(x) ? ' ' : '') + x, ''); }
+// 派生語の行の先頭から「単語」と品詞を取り出す
+function splitHead(t, s) {
+  const m = t.match(/^[A-Za-zÀ-ɏ][A-Za-zÀ-ɏ'’\-]*/);
+  if (!m) return {wd: '', pos: '', rest: t};
+  let wd = m[0], i = wd.length, r;
+  while ((r = t.slice(i).match(/^(?:\s*(?:…\s*)?[a-zÀ-ɏ][A-Za-zÀ-ɏ'’\-]*|\s*…)/))) { wd += r[0]; i += r[0].length; }
+  let rest = t.slice(i).replace(/^[\s）)\]］]+/, '');
+  wd = deacc(wd).replace(/['’`´\d¹²³]+$/, '').replace(/\s+/g, ' ').trim();
+  if (s && !wd.toLowerCase().startsWith(s) && wd.slice(1).toLowerCase().startsWith(s)) wd = wd.slice(1);
+  const pm = rest.match(/^([名動形副前接助感構頭尾代定图図])/) || rest.match(/^([Z#])(?![A-Za-z])/); // 単語の直後なら漢字が続いても品詞とみなす
+  let pos = '';
+  if (pm) { pos = POSALT[pm[1]] || pm[1]; rest = rest.slice(1); }
+  return {wd, pos, rest};
+}
 // 意味の取り出し：丸数字の直後の日本語と、品詞の後ろの日本語だけを残し、英語の言い換え・↔・【】・Ⓒ Ⓤ などは省く
 const CIRC = '①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳';
 const JA = /[ぁ-んァ-ヶ一-龠々ー]/;
 const OPN = '（(［[〔【「『', CLS = '）)］]〕】」』';
-function normT(t) { return t.replace(/<->|<>/g, '↔').replace(/\.{2,}|‥/g, '…').replace(/([ぁ-んァ-ヶ一-龠々])\.(?![A-Za-z])/g, '$1…').replace(/[~〜]/g, '～'); }
+const CNTOK = /[復転避収答想顧路数覧調実論座癖頭述語笛紅]/; // 回・口で始まる語。それ以外の先頭の回・口は Ⓒ Ⓤ の読み間違いとして省く
+function normT(t) {
+  return t.replace(/<->|<>/g, '↔').replace(/\.{2,}|‥/g, '…').replace(/[~〜]/g, '～')
+    .replace(/…[.,](?=\s*[ぁ-んァ-ヶ一-龠々（])/g, '…，')
+    .replace(/([ぁ-んァ-ヶ一-龠々])\.(?![A-Za-z])/g, '$1…')
+    .replace(/([ぁ-んァ-ヶ一-龠々])\s*,\s*(?=[ぁ-んァ-ヶ一-龠々])/g, '$1，');
+}
 function grpEnd(t, i) { let d = 0; for (let k = i; k < t.length; k++) { if (OPN.includes(t[k])) d++; else if (CLS.includes(t[k]) && --d === 0) return k + 1; } return -1; }
 // 日本語の説明の括弧（（気持・意見など）など）なら、その終わりの位置を返す
 function jaGroup(t, i) {
@@ -574,8 +605,8 @@ function jphrase(t) {
   const ph = k => /[AB]/.test(t[k]) && !/[A-Za-z]/.test(t[k - 1] || '') && /^[（(ぁ-んァ-ヶ一-龠々]/.test(t[k + 1] || ''); // A（人）に などの A
   while (i < t.length) { // 日本語が始まるまで飛ばす
     const c = t[i];
-    if (JA.test(c) && !('回口囗'.includes(c) && !JA.test(t[i + 1] || ''))) break;
-    if ((OPN.includes(c) && jaGroup(t, i)) || ('…～'.includes(c) && jaAt(t, i + 1)) || ph(i)) break;
+    if ('回口囗'.includes(c) && !CNTOK.test(t[i + 1] || '')) { i++; continue; }
+    if (JA.test(c) || (OPN.includes(c) && jaGroup(t, i)) || ('…～'.includes(c) && jaAt(t, i + 1)) || ph(i)) break;
     if (OPN.includes(c)) { const e = grpEnd(t, i); i = e > 0 ? e : i + 1; continue; }
     i++;
   }
@@ -612,8 +643,9 @@ function senses(t) {
 }
 // words: [{hw, mk: 見出し語が出てきた位置}]、S: 意味の部分の行 → 単語ごとの {ja: 意味, p: 品詞}
 function sortMeanings(words, S) {
-  const n = S.length, m = words.length, st = words.map(w => stemOf(w.hw));
-  const C = i => i > 0 && i < n && cont(S[i - 1], S[i]);
+  const n = S.length, m = words.length;
+  const st = words.map(w => { const b = baseOf(w.hw); return {b, s: stemOf(b)}; });
+  const C = i => i > 0 && i < n && cont(S[i - 1], S[i], st);
   const anc = S.map((x, i) => C(i) ? -1 : anchorOf(x, st));
   let mx = -1;
   anc.forEach((j, i) => { if (j >= 0) { if (j < mx) anc[i] = -1; else mx = j; } });
@@ -626,7 +658,7 @@ function sortMeanings(words, S) {
     const ok = i => i === hi || !C(i);
     let pick = -1;
     if (last[j] < 0) { // 派生語がない語は、品詞の記号 → 見出し語の位置 の順で次の語の始まりを探す
-      for (let i = lo; i < hi && pick < 0; i++) if (!C(i) && posStart(S[i]) && !dashPos(S[i])) pick = i;
+      for (let i = lo; i < hi && pick < 0; i++) if (!C(i) && posOf(S[i]) && !dashPos(S[i])) pick = i;
       const mk = words[j + 1].mk;
       if (pick < 0 && mk >= lo && mk <= hi && ok(mk)) pick = mk;
     }
@@ -638,7 +670,7 @@ function sortMeanings(words, S) {
     const items = [];
     for (let i = b[j]; i < b[j + 1]; i++) {
       const x = S[i], c = i > b[j] && C(i);
-      const k = anc[i] === j ? 'd' : !c && items.length && (dashPos(x) || posStart(x)) ? 'o' : '';
+      const k = anc[i] === j ? 'd' : !c && items.length && (dashPos(x) || posOf(x)) ? 'o' : '';
       if (!items.length || (k && !c)) items.push({k: k || 'm', L: []});
       items[items.length - 1].L.push(x);
     }
@@ -647,51 +679,79 @@ function sortMeanings(words, S) {
     items.forEach((it, idx) => {
       let t = normT(joinL(it.L).replace(JUNK, ''));
       if (it.k === 'd') { // 派生語：「単語（品詞）日本語」だけを残す
-        const mm = t.match(/^[A-Za-zÀ-ɏ'’\-.… ]+/); let wd = mm ? mm[0] : ''; t = t.slice(wd.length).trim();
-        wd = deacc(wd).replace(/\s+/g, ' ').trim();
-        if (st[j] && !wd.toLowerCase().startsWith(st[j]) && wd.slice(1).toLowerCase().startsWith(st[j])) wd = wd.slice(1);
-        const pm = t.match(POSRX); if (pm) t = t.slice(1).trim();
-        parts.push(wd + (pm ? '（' + pm[1] + '）' : '') + senses(t).join('　'));
+        const h = splitHead(t, st[j].s);
+        parts.push((h.wd + (h.pos ? '（' + h.pos + '）' : ' ') + senses(h.rest).join('　')).trim());
         return;
       }
       if (it.k === 'o') t = t.replace(DASH, '');
-      const pm = t.match(POSRX); if (pm) t = t.slice(1).trim();
+      const pp = posOf(t); if (pp) t = t.replace(JUNK, '').slice(1);
       const g = senses(t);
       if (!g.length) return;
-      if (idx === 0 && it.k === 'm') { if (pm) pos = pm[1]; parts.push(...g); } // 最初の品詞は品詞の欄に入れる
-      else parts.push((pm ? '（' + pm[1] + '）' : '') + g.join('　'));
+      if (idx === 0 && it.k === 'm') { if (pp) pos = pp; parts.push(...g); } // 最初の品詞は品詞の欄に入れる
+      else parts.push((pp ? '（' + pp + '）' : '') + g.join('　'));
     });
     return {ja: parts.join('　'), p: pos};
   });
 }
+function enOnly(x) { return !JPRE.test(x) && /[A-Za-z]/.test(x); }
+function nWords(x) { return (x.match(/[A-Za-z]+/g) || []).length; }
+// 例文の始まり（大文字で始まる英語だけの行。短い行は次の行に小文字で続くもの）
+function isSentStart(L, k) {
+  const x = L[k];
+  if (!enOnly(x) || !/^["“‘'(]?[A-Z]/.test(x) || /[\/\[\]［］]/.test(x)) return false;
+  if (nWords(x) >= 4) return true;
+  let j = k + 1; while (j < L.length && NUMLN.test(L[j])) j++;
+  return nWords(x) >= 2 && j < L.length && enOnly(L[j]) && /^[a-z]/.test(L[j]);
+}
+// 和訳の前の行に続いている、括弧や英字のない日本語だけの行
+function plainJa(x) { return JPRE.test(x) && !/[A-Za-z（）()［］\[\]【】〔〕《》〈〉①-⑳]/.test(x) && !/。[」』]?$/.test(x); }
 function ocrParse(text) {
-  const blocks = [], out = [], skipped = [];
-  let cur = null;
+  const L = [], blocks = [], out = [], skipped = [];
   for (const raw of String(text).replace(/\r\n?/g, '\n').split('\n')) {
     const line = raw.replace(/^[\s　|•・]+|[\s　]+$/g, '');
-    if (!line) continue;
-    if (/^[0-9０-９]{1,3}$/.test(line)) { cur = {no: line, L: []}; blocks.push(cur); continue; }
-    if (!cur) { cur = {no: '', L: []}; blocks.push(cur); }
-    cur.L.push(line);
+    if (line) L.push(line);
   }
-  for (const b of blocks) {
-    const L = b.L; let i = 0, en = '', jx = -1;
-    while (i < L.length && !JPRE.test(L[i]) && /[A-Za-z]{2}/.test(L[i]) && (!en || !/[.?!"”’]$/.test(en))) en += (en ? ' ' : '') + L[i++];
-    for (let k = L.length - 1; k >= i; k--) if (JPRE.test(L[k]) && /。[」』]?$/.test(L[k])) { jx = k; break; }
-    if (!en || jx < 0) { if (L.length) skipped.push(b.no || L[0].slice(0, 12)); continue; }
+  // 例文から、和訳（「。」で終わる行）の後の次の例文までを1つの区切りにする
+  let cur = null;
+  for (let k = 0; k < L.length; k++) {
+    if (NUMLN.test(L[k])) continue;
+    if ((!cur || cur.ja) && isSentStart(L, k)) { cur = {L: [], ja: false}; blocks.push(cur); }
+    if (!cur) continue;
+    cur.L.push(L[k]);
+    if (JPRE.test(L[k]) && /。[」』]?$/.test(L[k])) cur.ja = true;
+  }
+  for (const bk of blocks) {
+    const B = bk.L; let en = B[0], i = 1;
+    while (i < B.length && i <= 3 && !/[.?!"”’]$/.test(en) && enOnly(B[i]) && /^[a-z]/.test(B[i]) && (/[.?!"”’]$/.test(B[i]) || /,$/.test(en))) en += ' ' + B[i++];
+    let te = -1; for (let k = B.length - 1; k >= i; k--) if (JPRE.test(B[k]) && /。[」』]?$/.test(B[k])) { te = k; break; }
+    if (te < 0) { skipped.push(en.slice(0, 16)); continue; }
+    let ts = te; while (ts - 1 >= i && te - ts < 2 && plainJa(B[ts - 1])) ts--;
+    const ja = B.slice(ts, te + 1).join(''), body = B.slice(i, ts);
     const seen = new Set(), words = [], S = [];
-    for (const x of L.slice(i, jx)) {
-      if (HWRE.test(x) && /[A-Za-z]/.test(x)) {
-        const hw = x.replace(/\.{3}/g, '…').trim(), key = norm(hw);
-        if (key && seen.has(key)) continue;
-        if (key && locate(en, hw)) { seen.add(key); words.push({hw, mk: S.length}); continue; }
-      }
+    for (let k = 0; k < body.length; k++) {
+      const x = body[k];
       if (PRON.test(x)) continue;
+      const c0 = x.replace(/^\d+\s*/, '');
+      if (HWRE.test(c0) && /[A-Za-z]/.test(c0)) {
+        let hw = cleanHw(c0), merged = false;
+        const nx = (body[k + 1] || '').replace(/^\d+\s*/, '');
+        // 2行に分かれた見出し語（regardless / of …）をつなぐ
+        if (HWRE.test(nx) && /^(?:[a-z]+|…|～|\()/.test(nx) && STOPW.has((nx.match(/^[a-z]+/) || [''])[0])) {
+          const h2 = cleanHw(hw + ' ' + nx); if (locate(en, h2)) { hw = h2; merged = true; }
+        }
+        const key = norm(hw);
+        if (key && toks(hw).some(o => !STOPW.has(o.t)) && locate(en, hw)) {
+          if (merged) k++;
+          if (!seen.has(key)) { seen.add(key); words.push({hw, mk: S.length}); continue; }
+          if (PRON.test(body[k + 1] || '')) continue; // 重ねてコピーした見出し語
+          // 同じ綴りの別の語（fair² など）は意味の行として扱う
+        }
+      }
       if ((x.length >= 4 && S.includes(x)) || (x.length >= 8 && S.some(y => y.includes(x)))) continue; // 重ねてコピーした行
       S.push(x);
     }
     const M = sortMeanings(words, S);
-    out.push({en, ja: L[jx], words: words.map((w, k) => ({hw: w.hw, ja: M[k].ja, p: M[k].p}))});
+    out.push({en, ja, words: words.map((w, k) => ({hw: w.hw, ja: M[k].ja, p: M[k].p}))});
   }
   return {out, skipped};
 }
