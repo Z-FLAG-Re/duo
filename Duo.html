@@ -556,6 +556,60 @@ function anchorOf(x, st) {
   return best;
 }
 function joinL(L) { return L.reduce((a, x) => a + (a && /[A-Za-z0-9]$/.test(a) && /^[A-Za-z]/.test(x) ? ' ' : '') + x, ''); }
+// 意味の取り出し：丸数字の直後の日本語と、品詞の後ろの日本語だけを残し、英語の言い換え・↔・【】・Ⓒ Ⓤ などは省く
+const CIRC = '①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳';
+const JA = /[ぁ-んァ-ヶ一-龠々ー]/;
+const OPN = '（(［[〔【「『', CLS = '）)］]〕】」』';
+function normT(t) { return t.replace(/<->|<>/g, '↔').replace(/\.{2,}|‥/g, '…').replace(/([ぁ-んァ-ヶ一-龠々])\.(?![A-Za-z])/g, '$1…').replace(/[~〜]/g, '～'); }
+function grpEnd(t, i) { let d = 0; for (let k = i; k < t.length; k++) { if (OPN.includes(t[k])) d++; else if (CLS.includes(t[k]) && --d === 0) return k + 1; } return -1; }
+// 日本語の説明の括弧（（気持・意見など）など）なら、その終わりの位置を返す
+function jaGroup(t, i) {
+  const e = grpEnd(t, i); if (e < 0 || t[i] === '【') return 0;
+  const g = t.slice(i + 1, e - 1);
+  return JA.test(g) && !/[A-Za-z]{2}/.test(g) && !/^\s*[↔←→]/.test(g) ? e : 0;
+}
+function jaAt(t, i) { return JA.test(t[i] || '') || (OPN.includes(t[i] || '') && jaGroup(t, i) > 0); }
+function jphrase(t) {
+  let i = 0, out = '';
+  const ph = k => /[AB]/.test(t[k]) && !/[A-Za-z]/.test(t[k - 1] || '') && /^[（(ぁ-んァ-ヶ一-龠々]/.test(t[k + 1] || ''); // A（人）に などの A
+  while (i < t.length) { // 日本語が始まるまで飛ばす
+    const c = t[i];
+    if (JA.test(c) && !('回口囗'.includes(c) && !JA.test(t[i + 1] || ''))) break;
+    if ((OPN.includes(c) && jaGroup(t, i)) || ('…～'.includes(c) && jaAt(t, i + 1)) || ph(i)) break;
+    if (OPN.includes(c)) { const e = grpEnd(t, i); i = e > 0 ? e : i + 1; continue; }
+    i++;
+  }
+  while (i < t.length) { // 日本語の続くところまで取る
+    const c = t[i];
+    if (OPN.includes(c)) {
+      const e = jaGroup(t, i);
+      if (e) { out += t.slice(i, e); i = e; continue; }
+      if (c === '『' && grpEnd(t, i) < 0) { i++; continue; }
+      break;
+    }
+    if (CLS.includes(c)) { out = OPN[CLS.indexOf(c)] + out + c; i++; continue; } // 欠けた開き括弧を補う
+    if ((/[\x21-\x7e]/.test(c) && !ph(i)) || /[①-⑳®↔←→]/.test(c)) break;
+    out += c; i++;
+  }
+  return out.replace(/\s+/g, '').replace(/[、，,・]+$/, '');
+}
+// 丸数字（読み取りで®になったものも）ごとに日本語を取り出す。番号が①に戻ったら別の品詞の意味として分ける
+function senses(t) {
+  const re = /[①-⑳®]/g, marks = []; let m;
+  while ((m = re.exec(t))) marks.push({i: m.index, n: m[0] === '®' ? 0 : m[0].charCodeAt(0) - 0x245F});
+  const groups = [[]];
+  const lead = jphrase(t.slice(0, marks.length ? marks[0].i : t.length));
+  let prev = 0;
+  if (lead) { groups[0].push(lead); prev = 1; }
+  marks.forEach((mk, k) => {
+    const n = mk.n || prev + 1;
+    if (n <= prev && groups[groups.length - 1].length) groups.push([]);
+    const x = jphrase(t.slice(mk.i + 1, k + 1 < marks.length ? marks[k + 1].i : t.length));
+    if (x) groups[groups.length - 1].push(x);
+    prev = n;
+  });
+  return groups.filter(g => g.length).map(g => g.length === 1 ? g[0] : g.map((x, k) => CIRC[k] + x).join(''));
+}
 // words: [{hw, mk: 見出し語が出てきた位置}]、S: 意味の部分の行 → 単語ごとの {ja: 意味, p: 品詞}
 function sortMeanings(words, S) {
   const n = S.length, m = words.length, st = words.map(w => stemOf(w.hw));
@@ -589,22 +643,24 @@ function sortMeanings(words, S) {
       items[items.length - 1].L.push(x);
     }
     let pos = '';
-    const parts = items.map((it, idx) => {
-      let t = joinL(it.L).replace(JUNK, '');
-      if (it.k === 'd') { // 派生語：「respectful（形）…」の形にする
+    const parts = [];
+    items.forEach((it, idx) => {
+      let t = normT(joinL(it.L).replace(JUNK, ''));
+      if (it.k === 'd') { // 派生語：「単語（品詞）日本語」だけを残す
         const mm = t.match(/^[A-Za-zÀ-ɏ'’\-.… ]+/); let wd = mm ? mm[0] : ''; t = t.slice(wd.length).trim();
-        wd = deacc(wd).replace(/\.{2,}/g, '…').replace(/\s+/g, ' ').trim();
+        wd = deacc(wd).replace(/\s+/g, ' ').trim();
         if (st[j] && !wd.toLowerCase().startsWith(st[j]) && wd.slice(1).toLowerCase().startsWith(st[j])) wd = wd.slice(1);
         const pm = t.match(POSRX); if (pm) t = t.slice(1).trim();
-        return wd + (pm ? '（' + pm[1] + '）' : '') + t;
+        parts.push(wd + (pm ? '（' + pm[1] + '）' : '') + senses(t).join('　'));
+        return;
       }
       if (it.k === 'o') t = t.replace(DASH, '');
-      const pm = t.match(POSRX);
-      if (!pm) return t.trim();
-      t = t.slice(1).trim();
-      if (idx === 0) { pos = pm[1]; return t; } // 最初の品詞は品詞の欄に入れる
-      return '（' + pm[1] + '）' + t;
-    }).filter(Boolean);
+      const pm = t.match(POSRX); if (pm) t = t.slice(1).trim();
+      const g = senses(t);
+      if (!g.length) return;
+      if (idx === 0 && it.k === 'm') { if (pm) pos = pm[1]; parts.push(...g); } // 最初の品詞は品詞の欄に入れる
+      else parts.push((pm ? '（' + pm[1] + '）' : '') + g.join('　'));
+    });
     return {ja: parts.join('　'), p: pos};
   });
 }
