@@ -143,6 +143,20 @@ label.btn{position:relative;display:flex;align-items:center;justify-content:cent
 .bph{display:flex;align-items:center;flex-wrap:wrap;gap:4px 10px;margin-top:2px}
 .bph label.add{margin-top:8px}
 .bph .small{flex:1 1 12em}
+.qn{margin-top:10px;font-size:15px}
+.qn select{font:600 16px var(--ui)}
+.imp{border:1px solid var(--rule);border-radius:10px;padding:12px;margin-top:10px}
+.ist{display:flex;gap:10px;margin-bottom:12px}
+.isn{flex:none;display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:50%;background:var(--ink);color:var(--on);font:600 13px/1 var(--ui);margin-top:2px}
+.isb{flex:1;min-width:0}
+.isb>b{display:block}
+.isb>.small{display:block}
+.isb textarea{margin-top:8px;min-height:7.6em}
+.how{margin-top:6px}
+.how ol{margin:6px 0 0;padding-left:1.3em}
+.how li{margin:2px 0}
+.imode{margin:4px 0 0;color:var(--sub)}
+.imode.best{color:var(--ink);font-weight:600}
 .ocrp{margin-top:10px}
 .ocrp p{margin:0 0 4px}
 .ocrp progress{width:100%}
@@ -163,7 +177,7 @@ label.btn{position:relative;display:flex;align-items:center;justify-content:cent
 /* ===== 保存（この端末のブラウザ内だけ） ===== */
 const K = {d: 'duoApp:data', p: 'duoApp:prog', u: 'duoApp:ui'};
 const NSEC = 45;
-const APP_VER = '2026-11-05 22:30';   // 更新するたびに変える
+const APP_VER = '2026-11-05 23:30';   // 更新するたびに変える
 function load(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } }
 function store(k, v) {
   try { localStorage.setItem(k, JSON.stringify(v)); return true; }
@@ -372,8 +386,13 @@ function vHome() {
   const n = {1: S.length, 2: W.filter(loc).length, 3: W.length, 4: W.length};
   let modes = '';
   for (let m = 1; m <= 4; m++) modes += `<button data-act="q" data-m="${m}"${n[m] ? '' : ' disabled'}><span class="n">${m}</span><span class="t">${MT[m]}</span><span class="d">${MD[m]}</span></button>`;
+  // 問題数：5問ずつ選べる（その範囲の問題より多い数を選んだ時は、全部を出題）
+  const mx = Math.max(n[1], n[3], 5);
+  let qo = `<option value="0"${UI.qn ? '' : ' selected'}>すべて</option>`;
+  for (let k = 5; k <= Math.min(300, Math.ceil(mx / 5) * 5); k += 5) qo += `<option value="${k}"${UI.qn === k ? ' selected' : ''}>${k}問</option>`;
   app.innerHTML = `<h1>DUO 単語帳</h1>
 <div class="range">Section <select id="ra" aria-label="開始セクション">${secOpts(UI.a)}</select>〜<select id="rb" aria-label="終了セクション">${secOpts(UI.b)}</select><button class="sm" data-act="all">全範囲</button></div>
+<div class="range qn">問題数 <select id="qn" aria-label="問題数">${qo}</select><span class="small sub">範囲の中からランダムに出題</span></div>
 <p class="cnt">英文${S.length}文、単語${W.length}語</p>
 <div class="panel modes">${modes}</div>
 <div class="row"><button data-act="list" data-t="s">英文一覧</button><button data-act="list" data-t="w">単語一覧</button></div>
@@ -387,7 +406,8 @@ function startQuiz(m) {
   let items = m === 1 ? sents(UI.a, UI.b) : words(UI.a, UI.b);
   if (m === 2) items = items.filter(loc);
   if (!items.length) return;
-  Q = {m, items: shuffle(items), i: 0, st: 0, ok: 0, ng: 0};
+  const all = shuffle(items);
+  Q = {m, items: UI.qn ? all.slice(0, UI.qn) : all, i: 0, st: 0, ok: 0, ng: 0};
   go('quiz'); focusAns();
 }
 function cloze(en, rg, filled) {
@@ -401,7 +421,7 @@ function cloze(en, rg, filled) {
 function vQuiz() {
   const it = Q.items[Q.i], card = Q.m === 1 || Q.m === 3;
   if (!it) {
-    app.innerHTML = topbar(MT[Q.m]) + `<div class="panel pad done"><p class="big tx">一巡しました</p><p class="sub">${card ? '覚えた' : '正解'} ${Q.ok}　${card ? 'まだ' : '不正解'} ${Q.ng}</p><div class="btns"><button data-act="home">戻る</button><button class="pri" data-act="again">もう一度</button></div></div>`;
+    app.innerHTML = topbar(MT[Q.m]) + `<div class="panel pad done"><p class="big tx">${Q.items.length}問終わりました</p><p class="sub">${card ? '覚えた' : '正解'} ${Q.ok}　${card ? 'まだ' : '不正解'} ${Q.ng}</p><div class="btns"><button data-act="home">戻る</button><button class="pri" data-act="again">もう一度</button></div></div>`;
     return;
   }
   const kind = Q.m === 1 ? 's' : 'w';
@@ -499,12 +519,23 @@ function vData() {
   for (let i = 1; i <= NSEC; i++) { const n = DB.sec[i] ? DB.sec[i].s.length : 0; g += `<button class="${n ? 'has' : ''}${i === DSEC ? ' cur' : ''}" data-act="dpick" data-s="${i}">${i}<small>${n ? n + '文' : '−'}</small></button>`; }
   app.innerHTML = topbar('データ管理') +
     `<div class="panel pad"><div class="range">Section <select id="dsec" aria-label="セクション">${secOpts(DSEC)}</select><span class="small sub">英文${S.length}文、単語${S.reduce((a, s) => a + s.w.length, 0)}語</span></div>
-<div class="addrow"><button class="add" data-act="addS">英文を追加<i aria-hidden="true">＋</i></button><button class="add" data-act="bulk">まとめて貼り付け</button><label class="btn add">写真から読み取る<input type="file" id="phf" class="vh" accept="image/*" multiple></label></div>
+<div class="addrow"><button class="add" data-act="addS">英文を追加<i aria-hidden="true">＋</i></button><button class="add" data-act="bulk">写真・文章から取り込む</button></div>
 <div id="ocrp" class="ocrp"${OCRBUSY ? '' : ' hidden'}><p class="small" id="ocrm"></p><progress id="ocrb" max="1" value="0"></progress></div>
 ${RAW ? `<details class="raw"><summary class="small sub">写真から読み取った文字（うまく取り込めない時の確認用）</summary><textarea readonly rows="8">${esc(RAW)}</textarea></details>` : ''}
 <div class="cks" id="cks" hidden></div>
-<div id="bulk" hidden><textarea id="btxt" rows="6" placeholder="写真のテキスト認識でコピーした文章を、そのまま貼り付けます" ${NOAUTO}></textarea>
-<div class="bph"><label class="btn add">写真も使う<input type="file" id="bphf" class="vh" accept="image/*" multiple></label><span class="small sub" id="bphn"></span><button class="lnk" id="bphx" data-act="bphx" hidden>外す</button></div><div class="btns"><button data-act="bclose">閉じる</button><button class="pri" data-act="bimp">取り込む</button></div></div>
+<div id="bulk" class="imp" hidden>
+<div class="ist"><span class="isn">1</span><div class="isb"><b>本のページの写真を選ぶ</b><span class="small sub">ページをまたぐ時は、続きの2枚まで</span>
+<div class="bph"><label class="btn add">写真を選ぶ<input type="file" id="bphf" class="vh" accept="image/*" multiple></label><span class="small sub" id="bphn"></span><button class="lnk" id="bphx" data-act="bphx" hidden>外す</button></div></div></div>
+<div class="ist"><span class="isn">2</span><div class="isb"><b>同じ写真の文字を貼り付ける</b><span class="small sub">おすすめ。無くても取り込めます</span>
+<textarea id="btxt" rows="5" placeholder="写真アプリのテキスト認識でコピーした文字を、ここに貼り付けます" ${NOAUTO}></textarea>
+<details class="how"><summary class="small sub">文字のコピーのしかた</summary><ol class="small">
+<li>「写真」アプリで、同じ写真を開きます。</li>
+<li>右下のテキスト認識のボタン（四角の中に線があるマーク）を押します。</li>
+<li>文字を長押しして「すべてを選択」を押し、「コピー」を押します。</li>
+<li>このアプリに戻り、上の欄を長押しして「ペースト」を押します。写真が2枚の時は、1枚目の文字の後に2枚目の文字を続けて貼り付けます。</li>
+</ol></details></div></div>
+<p class="small imode" id="imode"></p>
+<div class="btns"><button data-act="bclose">閉じる</button><button class="pri" data-act="bimp">取り込む</button></div></div>
 ${S.map(s => senBox(s, N)).join('') || '<p class="note">「英文を追加」で、このSectionの最初の英文を入れてください。</p>'}</div>
 <div class="panel pad"><h3 class="hd">入力済みのセクション</h3><div class="grid">${g}</div></div>
 <div class="panel pad"><h3 class="hd">バックアップ</h3>
@@ -528,6 +559,7 @@ function wstat(w, s) {
   box.querySelector('.msg').innerHTML = r ? `虫食いの箇所：<span class="tx redink b">${esc(r.ans)}</span>` : '英文中に見つかりません。英文中の形を入れてください（離れた部分は … で区切ります）。';
 }
 function onInput(e) {
+  if (e.target.id === 'btxt') { impMode(); return; }
   const t = e.target, id = t.dataset ? t.dataset.id : null, f = t.dataset ? t.dataset.f : null, x = id ? IDX.get(id) : null;
   if (!x || !f) return;
   x.o[f] = t.value;
@@ -597,7 +629,7 @@ function kindOf(hw) { return /\s/.test(phNorm(hw).replace(/\([^)]*\)/g, ' ').rep
 const deacc = x => x.normalize('NFD').replace(/[̀-ͯ]/g, '').normalize('NFC');
 function baseOf(hw) { return toks(phNorm(hw).replace(/…/g, ' ')).map(o => o.t).filter(x => x.length > 1 && !['be', 'an', 'the', 'to', "one's", 'oneself'].includes(x))[0] || ''; }
 function stemOf(b) { return b.length > 4 && /[ey]$/.test(b) ? b.slice(0, -1) : b; }
-function cleanHw(x) { return x.replace(/\.{2,}/g, '…').replace(/['’`´\d¹²³]+$/, '').replace(/\s+/g, ' ').trim(); }
+function cleanHw(x) { return x.replace(/\b(OF|TO|IN|ON|AT|FOR|WITH|BY|FROM|AS|INTO|ABOUT)\b/g, m => m.toLowerCase()).replace(/\s+[.·・]$/, ' …').replace(/\.{2,}/g, '…').replace(/^([^(（]*[A-Za-z])\s*…\)/, '$1(…)').replace(/['’`´\d¹²³]+$/, '').replace(/\s+/g, ' ').trim(); }
 function opened(x) { let d = 0; for (const c of x) { if ('（([［【〔'.includes(c)) d++; else if ('）)]］】〕'.includes(c) && d) d--; } return d > 0; }
 function lcp(p, q) { let n = 0; while (n < p.length && n < q.length && p[n] === q[n]) n++; return n; }
 // 派生語・関連語の行（respectful、in the original など）なら、どの見出し語のものかを返す
@@ -635,12 +667,15 @@ function cont(p, x, st) { if (!opened(p) && relLine(x)) return false; return ope
 function joinL(L) { return L.reduce((a, x) => a + (a && /[A-Za-z0-9]$/.test(a) && /^[A-Za-z]/.test(x) ? ' ' : '') + x, ''); }
 // 派生語の行の先頭から「単語」と品詞を取り出す
 function splitHead(t, s, b) {
+  t = t.replace(/^([A-Za-zÀ-ɏ]+)[06](?=[a-zÀ-ɏ])/, '$1o').replace(/([a-zÀ-ɏ])[06](?=[a-zÀ-ɏ])/g, '$1o');
   const m = t.match(/^[A-Za-zÀ-ɏ][A-Za-zÀ-ɏ'’\-]*/);
   if (!m) return {wd: '', pos: '', rest: t};
   let wd = m[0], i = wd.length, r;
   while ((r = t.slice(i).match(/^(?:\s*(?:…\s*)?[a-zÀ-ɏ][A-Za-zÀ-ɏ'’\-]*|\s*…)/))) { wd += r[0]; i += r[0].length; }
   let rest = t.slice(i).replace(/^[\s）)\]］]+/, '');
-  const alt = rest.match(/^[\[［]\s*([A-Za-z\u00C0-\u024F'’\- ]+?)\s*[\]］]/); if (alt) { wd += '[' + alt[1] + ']'; rest = rest.slice(alt[0].length).replace(/^\s+/, ''); }
+  const par = rest.match(/^[(（]\s*([A-Za-z]{0,8}\s*[.…‥]*|[.…‥]+)\s*[)）]\s*/); if (par && /^\s*[(（][^)）]*[)）]\s*[名動形副前接助感構頭尾代定图図]/.test(rest)) { wd += '(' + (par[1].replace(/[.‥…]+/g, '…').trim() || '…') + ')'; rest = rest.slice(par[0].length); }
+  const alt = rest.match(/^[\[［]\s*([A-Za-z\u00C0-\u024F'’\- ]+?)\s*[\]］」｣]/); if (alt) { wd += '[' + alt[1] + ']'; rest = rest.slice(alt[0].length).replace(/^\s+/, ''); }
+  if (/^[a-zÀ-ɏ]/.test(wd) && /[A-Z]/.test(wd)) wd = wd.toLowerCase();
   wd = deacc(wd).replace(/['’`´\d¹²³]+$/, '').replace(/…+/g, '…').replace(/\s+/g, ' ').trim();
   const w0 = wd.toLowerCase(), w1 = w0.slice(1);
   if (s && !w0.startsWith(s) && (w1.startsWith(s) || (b && lcp(w1, b) >= 4 && lcp(w1, b) > lcp(w0, b)))) wd = wd.slice(1);
@@ -655,8 +690,8 @@ const JA = /[ぁ-んァ-ヶ一-龠々ー]/;
 const OPN = '（(［[〔【「『', CLS = '）)］]〕】」』';
 const CNTOK = /[復転避収答想顧路数覧調実論座癖頭述語笛紅]/; // 回・口で始まる語。それ以外の先頭の回・口は Ⓒ Ⓤ の読み間違いとして省く
 function normT(t) {
-  return t.replace(/[ⒸⓊⓈⓅ©]/g, ' ').replace(/(^|[^A-Za-z])(?:[CＣ]\s*[,.、・，]?\s*[UＵ]|[CUSPＣＵＳＰ])(?=\s*[ぁ-んァ-ヶ一-龠々（(〔［\[])/g, '$1 ').replace(/(?:ょ[と4]ょ?|な[=＝])(?=[がのをにで）)])/g, 'など').replace(/<->|<>/g, '↔').replace(/\.{2,}|‥/g, '…').replace(/[~〜]/g, '～')
-    .replace(/…[.,](?=\s*[ぁ-んァ-ヶ一-龠々（])/g, '…，')
+  return t.replace(/[ⒸⓊⓈⓅ©]/g, ' ').replace(/(^|[^A-Za-z])(?:[CＣ]\s*[,.、・，]?\s*[UＵ]|[CUSPＣＵＳＰ])(?=\s*[ぁ-んァ-ヶ一-龠々（(〔［\[])/g, '$1 ').replace(/(?:ょ[と4]ょ?|なょ?[=＝]|なょ?[と4]|[gsぉ][gsょ]?[と=＝])(?=[がのをにで）)])/g, 'など').replace(/<->|<>/g, '↔').replace(/[.‥]*…[.…‥]*|\.{2,}|‥/g, (m, o, str) => /…\.$/.test(m) && /[ぁ-んァ-ヶ一-龠々（]/.test(str[o + m.length] || '') ? '…，' : '…').replace(/[~〜]/g, '～')
+    .replace(/…[.,](?=\s*[ぁ-んァ-ヶ一-龠々（(])/g, '…，')
     .replace(/([ぁ-んァ-ヶ一-龠々])\.(?![A-Za-z])/g, '$1…')
     .replace(/([ぁ-んァ-ヶ一-龠々）)])\s*,\s*(?=[ぁ-んァ-ヶ一-龠々（(…])/g, '$1，').replace(/…{2,}/g, '…');
 }
@@ -687,6 +722,9 @@ function jphrase(t, note) {
       const e = jaGroup(t, i);
       if (e) { out += t.slice(i, e); i = e; continue; }
       if (c === '『' && grpEnd(t, i) < 0) { i++; continue; }
+      // 英語の言い換えは日本語の後に来るので、括弧のすぐ後に日本語が続くなら、読み取れなかった日本語の括弧として飛ばす
+      const g = grpEnd(t, i);
+      if (g > 0 && out && JA.test(t[g] || '') && g - i <= 14 && !/^[a-z\s\/.,'’\-…~*]+$/.test(t.slice(i + 1, g - 1))) { note('読み取れなかった括弧の部分を省きました。本と見比べてください'); i = g; continue; }
       break;
     }
     if (CLS.includes(c)) { out = OPN[CLS.indexOf(c)] + out + c; i++; note('欠けていた開き括弧を補いました'); continue; } // 欠けた開き括弧を補う
@@ -698,14 +736,15 @@ function jphrase(t, note) {
 // 丸数字（読み取りで®になったものも）ごとに日本語を取り出す。番号が①に戻ったら別の品詞の意味として分ける
 function senses(t, note) {
   note = note || (() => {});
-  const re = /[①-⑳®]/g, marks = []; let m;
-  while ((m = re.exec(t))) marks.push({i: m.index, n: m[0] === '®' ? 0 : m[0].charCodeAt(0) - 0x245F});
+  const re = /[①-⑳®]|@(?=\s*[ぁ-んァ-ヶ一-龠々（(〔［\[])/g, marks = []; let m;
+  while ((m = re.exec(t))) marks.push({i: m.index, n: /[®@]/.test(m[0]) ? 0 : m[0].charCodeAt(0) - 0x245F});
   const groups = [[]];
   const lead = jphrase(t.slice(0, marks.length ? marks[0].i : t.length), note);
   let prev = 0, odd = false;
   if (lead) { groups[0].push(lead); prev = 1; if (marks.length && marks[0].n > 1) note('①の記号が読み取れませんでした。①の意味が欠けていないか確認してください'); }
   marks.forEach((mk, k) => {
     let n = mk.n;
+    if (k + 1 < marks.length && !t.slice(mk.i + 1, marks[k + 1].i).trim()) return;
     if (n === 1) { if (groups[groups.length - 1].length) groups.push([]); }
     else if (!n && !prev) n = 1;                              // 先頭の®（Ⓕなどの読み間違い）
     else if (n !== prev + 1) { n = prev + 1; odd = true; }    // ®や⑦など、並びに合わない番号は前の番号の次とみなす
@@ -927,21 +966,188 @@ function cleanPx(cx, W, H) {
   for (let i = 0, j = 0; j < n; i += 4, j++) { const g = Math.max(0, Math.min(255, (gray[j] - lo) * k)) | 0; px[i] = px[i + 1] = px[i + 2] = g; px[i + 3] = 255; }
   cx.putImageData(d, 0, 0);
 }
+// ===== 写真の画素から、例文の帯・四角い枠（品詞・C/U・チェック欄）・長い罫線を見つける =====
+// 例文の帯（青みがかった背景）：行ごとに、紙の明るい部分の「青 − 赤」の平均を取る（白黒にする前の色で）
+function tintRows(cx, W, H) {
+  const d = cx.getImageData(0, 0, W, H).data, out = new Float32Array(H), xa = Math.round(W * 0.06), xb = Math.round(W * 0.94), st = Math.max(1, Math.round(W / 700)), hist = new Uint32Array(256);
+  for (let y = 0; y < H; y++) {
+    hist.fill(0); let n = 0;
+    for (let x = xa; x < xb; x += st) { const i = (y * W + x) * 4; hist[Math.max(d[i], d[i + 1], d[i + 2])]++; n++; }
+    let acc = 0, th = 255; for (let v = 0; v < 256; v++) { acc += hist[v]; if (acc >= n * 0.5) { th = v; break; } }
+    let s = 0, c = 0;
+    for (let x = xa; x < xb; x += st) { const i = (y * W + x) * 4; if (Math.max(d[i], d[i + 1], d[i + 2]) >= th) { s += d[i + 2] - d[i]; c++; } }
+    out[y] = c ? s / c : 0;
+  }
+  return out;
+}
+function tintBands(tint, lh) {
+  if (!tint || !tint.length) return [];
+  const a = Array.from(tint).sort((x, y) => x - y), base = a[a.length >> 1], H = tint.length, on = y => y < H && tint[y] - base > 9, out = [];
+  for (let y = 0; y < H; y++) {
+    if (!on(y)) continue;
+    let e = y; while (on(e + 1) || on(e + 2)) e++;
+    let s = 0; for (let k = y; k <= e; k++) s += tint[k] - base;
+    if (e - y + 1 >= lh * 0.8 && s / (e - y + 1) >= 10) out.push({y0: y, y1: e});
+    y = e;
+  }
+  return out;
+}
+// 暗い画素（文字・線）を1にする
+function darkOf(cx, W, H, th) { const d = cx.getImageData(0, 0, W, H).data, b = new Uint8Array(W * H); for (let i = 0, j = 0; j < b.length; i += 4, j++) b[j] = d[i] < (th || 150) ? 1 : 0; return b; }
+// つながった暗い画素のかたまり（斜めも含む）を、横の連なりからまとめる
+function blobs(b, W, H, X0) {
+  let cap = 1 << 16, ry = new Int32Array(cap), rs = new Int32Array(cap), re = new Int32Array(cap), par = new Int32Array(cap), n = 0;
+  const grow = () => { cap *= 2; const g = a => { const z = new Int32Array(cap); z.set(a); return z; }; ry = g(ry); rs = g(rs); re = g(re); par = g(par); };
+  const find = a => { while (par[a] !== a) { par[a] = par[par[a]]; a = par[a]; } return a; };
+  let pS = 0, pE = 0;
+  for (let y = 0; y < H; y++) {
+    const cS = n, o = y * W; let x = X0, k0 = pS;
+    while (x < W) {
+      if (!b[o + x]) { x++; continue; }
+      let e = x; while (e < W && b[o + e]) e++;
+      if (n >= cap) grow();
+      ry[n] = y; rs[n] = x; re[n] = e - 1; par[n] = n;
+      while (k0 < pE && re[k0] < x - 1) k0++;
+      for (let k = k0; k < pE && rs[k] <= e; k++) { const p = find(k), q = find(n); if (p !== q) { if (p < q) par[q] = p; else par[p] = q; } }
+      n++; x = e;
+    }
+    pS = cS; pE = n;
+  }
+  const cid = new Int32Array(n), root = new Int32Array(n).fill(-1); let nc = 0;
+  for (let k = 0; k < n; k++) { const r = find(k); if (root[r] < 0) root[r] = nc++; cid[k] = root[r]; }
+  const bx0 = new Int32Array(nc).fill(1 << 30), bx1 = new Int32Array(nc).fill(-1), by0 = new Int32Array(nc).fill(1 << 30), by1 = new Int32Array(nc).fill(-1), st = new Int32Array(nc + 1);
+  for (let k = 0; k < n; k++) { const c = cid[k]; if (rs[k] < bx0[c]) bx0[c] = rs[k]; if (re[k] > bx1[c]) bx1[c] = re[k]; if (ry[k] < by0[c]) by0[c] = ry[k]; if (ry[k] > by1[c]) by1[c] = ry[k]; st[c + 1]++; }
+  for (let c = 0; c < nc; c++) st[c + 1] += st[c];
+  const idx = new Int32Array(n), at = st.slice(0, nc);
+  for (let k = 0; k < n; k++) idx[at[cid[k]]++] = k;
+  return {n: nc, bx0, bx1, by0, by1, st, idx, ry, rs, re};
+}
+// 四角い枠か：4辺がまっすぐで、内側に枠自身の画素がほとんど無い（丸数字や「o」は辺が曲がっているので外れる）
+function frameOf(C, q, b, W, big) {
+  const X0 = C.bx0[q], X1 = C.bx1[q], Y0 = C.by0[q], Y1 = C.by1[q], w = X1 - X0 + 1, h = Y1 - Y0 + 1, t = Math.max(2, Math.round(0.14 * Math.max(w, h))), NO = 1 << 30;
+  const top = new Int32Array(w).fill(NO), bot = new Int32Array(w).fill(-1), lef = new Int32Array(h).fill(NO), rig = new Int32Array(h).fill(-1);
+  let tot = 0, inner = 0;
+  for (let k = C.st[q]; k < C.st[q + 1]; k++) {
+    const r = C.idx[k], y = C.ry[r] - Y0, s = C.rs[r] - X0, e = C.re[r] - X0;
+    if (s < lef[y]) lef[y] = s; if (e > rig[y]) rig[y] = e;
+    for (let x = s; x <= e; x++) { if (y < top[x]) top[x] = y; if (y > bot[x]) bot[x] = y; }
+    tot += e - s + 1;
+    if (y >= 2 * t && y < h - 2 * t) { const a = Math.max(s, 2 * t), z = Math.min(e, w - 1 - 2 * t); if (z >= a) inner += z - a + 1; }
+  }
+  if (inner > tot * 0.12 && !big) return null;
+  const lim = Math.max(3, 0.09 * Math.max(w, h));
+  const straight = (a, L) => { let mn = NO, mx = -NO, miss = 0, n = 0; for (let i = Math.round(L * 0.12); i < Math.round(L * 0.88); i++) { n++; const v = a[i]; if (v < 0 || v >= NO) { miss++; continue; } if (v < mn) mn = v; if (v > mx) mx = v; } return n > 0 && miss <= n * 0.12 && mx - mn <= lim; };
+  if (!straight(top, w) || !straight(bot, w) || !straight(lef, h) || !straight(rig, h)) return null;
+  let fill = 0; for (let y = Y0 + t; y <= Y1 - t; y++) for (let x = X0 + t; x <= X1 - t; x++) fill += b[y * W + x];
+  // 角が丸いか（C・U などの記号の四角は角が丸い。「国」などの漢字の囲みは角がある）
+  const c = Math.max(2, Math.round(0.12 * Math.min(w, h)));
+  let round = 0;
+  for (const [cx, cy] of [[0, 0], [w - c, 0], [0, h - c], [w - c, h - c]]) { let n = 0; for (let y = cy; y < cy + c; y++) for (let x = cx; x < cx + c; x++) n += b[(Y0 + y) * W + X0 + x]; if (n <= 1) round++; }
+  return {x0: X0, y0: Y0, x1: X1, y1: Y1, t, fill: fill / Math.max(1, (w - 2 * t) * (h - 2 * t)), round};
+}
+// 長い罫線（横は2.5行分、縦は1.5行分以上。2画素までの切れ目はつなぐ）
+function longLines(b, W, H, lh, X0) {
+  const g = 3, hmin = lh * 2.5, vmin = lh * 1.5, hs = [], vs = [];
+  for (let y = 0; y < H; y++) { const o = y * W; let s = -1, l = -1; for (let x = X0; x < W; x++) { if (!b[o + x]) continue; if (s >= 0 && x - l <= g) { l = x; continue; } if (s >= 0 && l - s + 1 >= hmin) hs.push([y, s, l]); s = l = x; } if (s >= 0 && l - s + 1 >= hmin) hs.push([y, s, l]); }
+  for (let x = X0; x < W; x++) { let s = -1, l = -1; for (let y = 0, o = x; y < H; y++, o += W) { if (!b[o]) continue; if (s >= 0 && y - l <= g) { l = y; continue; } if (s >= 0 && l - s + 1 >= vmin) vs.push([x, s, l]); s = l = y; } if (s >= 0 && l - s + 1 >= vmin) vs.push([x, s, l]); }
+  const merge = S => { const out = []; for (const [p, a, z] of S) { let m = null; for (let i = out.length - 1; i >= 0; i--) { const o = out[i]; if (p - o.p1 > 2) continue; if (Math.min(z, o.z) - Math.max(a, o.a) > 0.5 * Math.min(z - a, o.z - o.a)) { m = o; break; } } if (m) { m.p1 = p; m.a = Math.min(m.a, a); m.z = Math.max(m.z, z); } else out.push({p0: p, p1: p, a, z}); } return out; };
+  return {h: merge(hs).map(o => ({y0: o.p0, y1: o.p1, x0: o.a, x1: o.z})), v: merge(vs).map(o => ({x0: o.p0, x1: o.p1, y0: o.a, y1: o.z}))};
+}
+// 1回目の読み取りで行の高さと段の境目が分かった後に、枠と罫線を探す
+function findMarks(cv, P) {
+  const W = cv.width, H = cv.height, lh = P.lh, b = darkOf(cv.getContext('2d'), W, H);
+  const X0 = Math.max(0, Math.floor(Math.min(P.DIV - lh * 3, W * 0.25))), C = blobs(b, W, H, X0), frames = [];
+  for (let q = 0; q < C.n; q++) {
+    const w = C.bx1[q] - C.bx0[q] + 1, h = C.by1[q] - C.by0[q] + 1;
+    if (w < lh * 0.72 || w > lh * 1.6 || h < lh * 0.72 || h > lh * 1.6 || w > h * 1.33 || h > w * 1.33) continue;
+    const f = frameOf(C, q, b, W, Math.min(w, h) >= lh * 1.02); if (f) frames.push(f);
+  }
+  // 中身の無い枠（チェック欄）：行の先頭にあるものだけ（「口」の字を消さないように）
+  for (const f of frames) {
+    if (f.fill >= 0.03) continue;
+    const ya = Math.round(f.y0 + (f.y1 - f.y0) * 0.25), yb = Math.round(f.y1 - (f.y1 - f.y0) * 0.25), xa = Math.max(X0, Math.round(f.x0 - lh * 1.2));
+    let dark = false; for (let y = ya; y <= yb && !dark; y++) for (let x = xa; x < f.x0 - 2; x++) if (b[y * W + x]) { dark = true; break; }
+    if (!dark) f.kind = 'b';
+  }
+  // 和訳の囲み：大きくて細い（線だけの）かたまり。紙が曲がって線が斜めでも、線が切れて2つに分かれていても見つかる。
+  // 囲みの線は細くて薄く写りやすいので、薄めの灰色まで含めて調べる
+  const b2 = darkOf(cv.getContext('2d'), W, H, 190), C2 = blobs(b2, W, H, X0), parts = [];
+  { const C = C2;
+  for (let q = 0; q < C.n; q++) {
+    const w = C.bx1[q] - C.bx0[q] + 1, h = C.by1[q] - C.by0[q] + 1;
+    if (w < lh * 2 || h > lh * 8) continue;
+    let area = 0; for (let k = C.st[q]; k < C.st[q + 1]; k++) { const r = C.idx[k]; area += C.re[r] - C.rs[r] + 1; }
+    if (area / (2 * (w + h)) > Math.max(4, lh * 0.25)) continue;
+    // 消す部分：横に長い連なり（上下の辺）と、左右の端の部分（縦の辺）。中の字に触れていても、字の大部分は残る
+    const er = [], nb = (w >> 3) + 1, tp = new Array(nb).fill(null), bp = new Array(nb).fill(null);
+    for (let k = C.st[q]; k < C.st[q + 1]; k++) {
+      const r = C.idx[k], a = C.rs[r], z = C.re[r], y = C.ry[r];
+      if (z - a + 1 >= lh * 1.5 || a - C.bx0[q] < lh * 0.3 || C.bx1[q] - z < lh * 0.3) er.push({x0: a, x1: z, y0: y, y1: y});
+      if (z - a + 1 >= lh * 0.5) for (let i = (a - C.bx0[q]) >> 3; i <= (z - C.bx0[q]) >> 3; i++) { if (tp[i] == null || y < tp[i]) tp[i] = y; if (bp[i] == null || y > bp[i]) bp[i] = y; }
+    }
+    parts.push({x0: C.bx0[q], y0: C.by0[q], x1: C.bx1[q], y1: C.by1[q], er, tp, bp});
+  } }
+  // 線が切れて分かれた囲みをつなぐ（高さが重なり、横に近いもの）
+  for (let i = 0; i < parts.length; i++) for (let j = i + 1; j < parts.length; j++) {
+    const a = parts[i], c = parts[j];
+    if (!a || !c) continue;
+    if (Math.min(a.y1, c.y1) - Math.max(a.y0, c.y0) < 0.5 * Math.max(a.y1 - a.y0, c.y1 - c.y0) || Math.max(a.x0, c.x0) - Math.min(a.x1, c.x1) > lh * 3) continue;
+    const m = {x0: Math.min(a.x0, c.x0), y0: Math.min(a.y0, c.y0), x1: Math.max(a.x1, c.x1), y1: Math.max(a.y1, c.y1), er: a.er.concat(c.er)};
+    const nb = ((m.x1 - m.x0) >> 3) + 1; m.tp = new Array(nb).fill(null); m.bp = new Array(nb).fill(null);
+    for (const o of [a, c]) o.tp.forEach((t, k) => { const i2 = Math.min(nb - 1, (o.x0 + k * 8 - m.x0) >> 3); if (t != null && (m.tp[i2] == null || t < m.tp[i2])) m.tp[i2] = t; const u = o.bp[k]; if (u != null && (m.bp[i2] == null || u > m.bp[i2])) m.bp[i2] = u; });
+    parts[i] = m; parts[j] = null; j = i;
+  }
+  const boxes = parts.filter(b => b && b.x1 - b.x0 >= lh * 6 && b.y1 - b.y0 >= lh * 1.2);
+  boxes.forEach(b => { const fillN = a => { for (let i = 0; i < a.length; i++) if (a[i] == null) { let d = 1; while (d < a.length && a[i - d] == null && a[i + d] == null) d++; a[i] = a[i - d] != null ? a[i - d] : a[i + d] != null ? a[i + d] : null; } }; fillN(b.tp); fillN(b.bp); });
+  const L = longLines(b, W, H, lh, X0);
+  return {frames, hl: L.h, vl: L.v, boxes};
+}
+// 枠の中身（品詞の漢字や C・U の文字）を、1行に1つずつ並べた画像にする（まとめて1回で読む）
+const STRIP = {T: 56, G: 44};
+function frameStrip(cv, fr) {
+  const {T, G} = STRIP, ws = fr.map(f => Math.round((f.x1 - f.x0 + 1 - 2 * f.t) * T / Math.max(1, f.y1 - f.y0 + 1 - 2 * f.t)));
+  const c = document.createElement('canvas'); c.width = Math.max(...ws, T) + 80; c.height = fr.length * (T + G) + 40;
+  const x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height);
+  fr.forEach((f, i) => { const sw = f.x1 - f.x0 + 1 - 2 * f.t, sh = f.y1 - f.y0 + 1 - 2 * f.t; if (sw > 2 && sh > 2) x.drawImage(cv, f.x0 + f.t, f.y0 + f.t, sw, sh, 40, 20 + i * (T + G), ws[i], T); });
+  return c;
+}
+const POSCH = '名動形副前接助感構頭尾代定';
+function frameKinds(fr, data) {
+  const {T, G} = STRIP, txt = fr.map(() => '');
+  for (const l of ocrLines(data)) for (const w of (l.words || [])) {
+    if (!w.bbox) continue;
+    const i = Math.round(((w.bbox.y0 + w.bbox.y1) / 2 - 20 - T / 2) / (T + G));
+    if (i >= 0 && i < fr.length) txt[i] += String(w.text || '').replace(/\s+/g, '');
+  }
+  const pw = [];
+  fr.forEach((f, i) => { f.txt = txt[i]; if (txt[i].length && txt[i].length <= 2 && POSCH.includes(txt[i][0])) { f.kind = 'p'; f.pos = txt[i][0]; pw.push(f.x1 - f.x0); } });
+  pw.sort((a, b) => a - b); const mw = pw.length ? pw[pw.length >> 1] : 0;
+  // C・U・S・P などの記号（意味には使わないので枠ごと消す）。「国」の中の「玉」などは当てはまらないので残る
+  fr.forEach(f => {
+    if (f.kind) return;
+    const t = f.txt || '', w = f.x1 - f.x0;
+    if (/^(?:[CUSPcusp©¢]|C[.,・]?U|IF|F)$/.test(t) || (mw && w < mw * 0.95 && !/[一-龠々]/.test(t) && f.fill >= 0.06 && f.fill <= 0.22)) f.kind = 'm';
+    // 品詞の四角の大きさで中身が読めなかったもの：枠の線だけ消して、中の字は行の中で読む
+    else if (mw && w >= mw * 0.9 && f.fill >= 0.35) f.kind = 'q';
+  });
+}
 // 読み取り用の画像（長い辺を 2200〜3000 にそろえる）。__k は元の写真との倍率
 function prepImg(im) {
   const w0 = im.naturalWidth, h0 = im.naturalHeight, L = Math.max(w0, h0);
   const sc = L > 3000 ? 3000 / L : L < 2200 ? 2200 / L : 1, W = Math.round(w0 * sc), H = Math.round(h0 * sc);
   const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
-  const cx = cv.getContext('2d'); cx.drawImage(im, 0, 0, W, H); cleanPx(cx, W, H);
+  const cx = cv.getContext('2d'); cx.drawImage(im, 0, 0, W, H); cv.__tint = tintRows(cx, W, H); cleanPx(cx, W, H);
   cv.__k = w0 / W;
   return cv;
 }
 // 読み直す範囲を、元の写真からできるだけ細かく切り出す（__m は読み取り用の画像に対する倍率）
-function cropImg(im, k, rc) {
+function cropImg(im, k, rc, er) {
   const m = Math.max(1, Math.min(k, 3500 / Math.max(rc.w, rc.h)));
   const sx = Math.max(0, rc.x * k), sy = Math.max(0, rc.y * k), sw = Math.min(im.naturalWidth - sx, rc.w * k), sh = Math.min(im.naturalHeight - sy, rc.h * k);
   const c = document.createElement('canvas'); c.width = Math.max(1, Math.round(sw / k * m)); c.height = Math.max(1, Math.round(sh / k * m));
   const cx = c.getContext('2d'); cx.drawImage(im, sx, sy, sw, sh, 0, 0, c.width, c.height); cleanPx(cx, c.width, c.height);
+  // 枠（品詞の四角・C/U・チェック欄）と罫線（和訳の囲み）を消す。品詞は後で文字として補う
+  if (er && er.length) { cx.fillStyle = '#fff'; for (const r of er) cx.fillRect((r.x0 - rc.x) * m - 1, (r.y0 - rc.y) * m - 1, (r.x1 - r.x0 + 1) * m + 2, (r.y1 - r.y0 + 1) * m + 2); }
   c.__ox = rc.x; c.__oy = rc.y; c.__m = m;
   return c;
 }
@@ -960,26 +1166,31 @@ function ocrLines(data) {
   if (!L.length && data.lines) L.push(...data.lines);
   return L;
 }
-function joinWords(ws) { let t = ''; for (const w of ws) t += (t && /[A-Za-z0-9.,;:!?)\]'’”…]$/.test(t) && /^[A-Za-z0-9(\["“‘'…]/.test(w.t) ? ' ' : '') + w.t; return t; }
+function joinWords(ws) { let t = '', sp = false; for (const w of ws) { t += (t && (sp || w.sp || (/[A-Za-z0-9.,;:!?)\]'’”…]$/.test(t) && /^[A-Za-z0-9(\["“‘'…]/.test(w.t))) ? ' ' : '') + w.t; sp = !!w.sp; } return t; }
 const DOTS = /^[:;|¦!.,'`´·・：\-_~"ilI1丨]+$/;   // 段の間の点線などの読み取り
 // 右の段の行の先頭の、チェック欄・品詞の四角・(1) などの読み取りを整える
 function cleanRow(t) {
+  t = t.replace(/(^|[^A-Za-z0-9])([A-Za-z]+)[06]([a-z]+)/g, '$1$2o$3');
   return t.replace(/^[\[［|ロ口□▢☐◻▯■CDO0〇○]\s*[一ーｰ\-－—―━]+\s*/, '━').replace(/^(?:[O0〇○ロ□口▢☐◻▯■]|\[\s*\])\s+/, '').replace(/^(?:[O0〇○ロ□口▢☐◻▯■]|\[\s*[\]J|1lI]?|[|L][\]J])\s*(?=[a-z\u00e0-\u024f])/, '').replace(/^[CD]\s+(?=[a-z\u00e0-\u024f]{3,})/, '').replace(/^[\[［|(（]([名動形副前接助感構頭尾代定])[\]］|)）]/, '$1').replace(/[(（]([1-9])[)）]/g, (m0, d) => CIRC[d - 1]);
 }
 // 左の段の行から、英文の中に見つかる見出し語を取り出す（前後の番号やチェック欄の読み取りは外す）
 function hwFrom(text, en) {
-  const tk = String(text).replace(/[^\x20-\x7e…]/g, ' ').split(/\s+/).filter(Boolean);
+  const tk = String(text).replace(/[^\x20-\x7e…]/g, ' ').replace(/[\]}|\\]/g, ' ').split(/\s+/).filter(Boolean);
   for (let a = 0; a < Math.min(3, tk.length); a++) for (let b = tk.length; b > a; b--) {
-    const hw = cleanHw(tk.slice(a, b).join(' ').replace(/^[^A-Za-z(…~]+/, ''));
+    if (/^[A-Z]$/.test(tk[a]) && b > a + 1) continue;
+    const hw = cleanHw(tk.slice(a, b).join(' ').replace(/^(?:[^A-Za-z(…~]|\([^A-Za-z)]*\)?)+/, ''));
     if (/[A-Za-z]{2}/.test(hw) && toks(hw).some(o => !STOPW.has(o.t)) && locate(en, hw)) return hw;
   }
   return '';
 }
+// 見出し語の先頭だけが大文字に読まれた時（Passage など）、英文中で小文字なら小文字にする
+function caseFix(hw, en) { if (!/^[A-Z][a-z]/.test(hw || '')) return hw; const r = locate(en, hw); return r && /^[a-z]/.test(r.ans) ? hw[0].toLowerCase() + hw.slice(1) : hw; }
 // 文字の並びの近さ（2文字ずつの組の重なり）。inc(a, b) は a の組のうち b にもあるものの割合
 function bigr(t) { const s = String(t).normalize('NFKC').toLowerCase().replace(/[^a-z0-9ぁ-んァ-ヶ一-龠々ー]+/g, ''), m = new Map(); for (let i = 0; i + 1 < s.length; i++) { const k = s.slice(i, i + 2); m.set(k, (m.get(k) || 0) + 1); } return {m, n: Math.max(1, s.length - 1)}; }
 function bcommon(A, B) { let c = 0; for (const [k, v] of A.m) { const w = B.m.get(k); if (w) c += Math.min(v, w); } return c; }
 function ovl(A, B) { return bcommon(A, B) / Math.min(A.n, B.n); }
 function inc(A, B) { return bcommon(A, B) / A.n; }
+function dice(A, B) { return 2 * bcommon(A, B) / (A.n + B.n); }
 // 文字認識の結果（文字と位置）から、英文・和訳・見出し語・意味を取り出す。
 // ex.eng：例文と左の段を英語専用で読み直した結果、ex.rj：右の段を読み直した結果、ex.lt：テキスト認識でコピーした文章（あれば文字はこちらを使う）。
 // rects は読み直す範囲
@@ -989,7 +1200,7 @@ function pageScan(data, W, H, ex) {
   const rects = [];
   const med = a => { const b = a.slice().sort((x, y) => x - y); return b.length ? b[b.length >> 1] : 0; };
   const wordsOf = l => (l.words && l.words.length ? l.words : [l]).filter(w => w && w.bbox && String(w.text || '').trim())
-    .map(w => ({t: String(w.text).trim(), x0: w.bbox.x0, y0: w.bbox.y0, x1: w.bbox.x1, y1: w.bbox.y1, cf: w.confidence == null ? 100 : +w.confidence}))
+    .map(w => ({t: String(w.text).trim(), x0: w.bbox.x0, y0: w.bbox.y0, x1: w.bbox.x1, y1: w.bbox.y1, cf: w.confidence == null ? 100 : +w.confidence, sp: w.sp}))
     .sort((a, b) => a.x0 - b.x0);
   const LN = ocrLines(data).map(wordsOf), all = LN.flat();
   if (!all.length) return {lh: 0, W, H, DIV: 0, units: [], Rrows: [], Lrows: [], LrowsE: [], rects, dbg: ['文字が1つも読み取れませんでした'], hasLead: false, lastOpen: false};
@@ -1013,8 +1224,11 @@ function pageScan(data, W, H, ex) {
   const wideEn = c => enLike(c.t) && c.x1 - c.x0 > W * 0.35;
   const enText = t => t.replace(/[ぁ-んァ-ヶ一-龠々]/g, '').replace(/^[^A-Za-z"“‘'(]+/, '').replace(/。$/, '.').replace(/\s+/g, ' ').trim();
   // 左の段（見出し語）と右の段（意味）の境目：塊の左端の位置を2つの集まりに分ける
-  const xs = CH.filter(c => !wideEn(c) && c.x0 < W * 0.75).map(c => c.x0);
-  let DIV = W * 0.3;
+  const xs = [];
+  { const cs = CH.filter(c => !wideEn(c) && c.x0 < W * 0.75).sort((a, b) => a.y - b.y), grp = [];
+    for (const c of cs) { const g = grp.find(g => Math.min(g.y1, c.y1) - Math.max(g.y0, c.y0) > 0.5 * Math.min(g.y1 - g.y0, c.y1 - c.y0)); if (g) { g.cs.push(c); g.y0 = Math.min(g.y0, c.y0); g.y1 = Math.max(g.y1, c.y1); } else grp.push({cs: [c], y0: c.y0, y1: c.y1}); }
+    for (const g of grp) { g.cs.sort((a, b) => a.x0 - b.x0); let x1 = -Infinity; for (const c of g.cs) { if (c.x0 - x1 > lh * 2) xs.push(c.x0); x1 = Math.max(x1, c.x1); } } }
+  let DIV = W * 0.3, divInfo = '', TX = 0;
   if (xs.length >= 2) {
     let cL = Math.min(...xs), cR = Math.max(...xs);
     for (let it = 0; it < 12; it++) { let sa = 0, na = 0, sb = 0, nb = 0; for (const x of xs) { if (Math.abs(x - cL) <= Math.abs(x - cR)) { sa += x; na++; } else { sb += x; nb++; } } if (na) cL = sa / na; if (nb) cR = sb / nb; }
@@ -1024,20 +1238,41 @@ function pageScan(data, W, H, ex) {
       // 品詞の四角は意味の段の左に出ているので、境目はいちばん左の品詞の四角より左にする
       const px = CH.filter(c => c.x0 >= (cL + cR) / 2 && /^[\[［|(（]?[名動形副前接助感構頭尾代定]/.test(c.t)).map(c => c.x0);
       if (px.length) DIV = Math.min(DIV, Math.min(...px) - lh * 0.3);
+      // 品詞の四角が読み取れていなくても入るように、意味の段の書き出しより四角1つ分以上左にする（左の段の見出し語には食い込まない）
+      TX = Rx[Rx.length >> 1]; DIV = Math.min(DIV, TX - lh * 2.2);
+      const Lx1 = CH.filter(c => !wideEn(c) && Math.abs(c.x0 - cL) < Math.abs(c.x0 - cR)).map(c => c.x1).sort((a, b) => a - b);
+      if (Lx1.length) DIV = Math.max(DIV, Lx1[Math.floor(Lx1.length * 0.75)] + lh * 0.5);
+      // 写真の画素から見つけた品詞の四角（いちばん確か）
+      const PF = ((ex.marks || {}).frames || []).filter(f => f.kind === 'p' && f.x0 > (cL + cR) / 2 - lh * 2);
+      if (PF.length) DIV = Math.min(DIV, Math.min(...PF.map(f => f.x0)) - lh * 0.3);
+      divInfo = ` 段の左${Math.round(cL)} 右${Math.round(cR)} 書き出し${Math.round(Rx[Rx.length >> 1])} 四角${PF.length ? Math.min(...PF.map(f => f.x0)) : '-'}`;
     }
   }
   // 段の境目の点線の読み取り（ii、: など）を除く
   const noDots = cs => cs.filter(c => !(c.x1 - c.x0 < lh * 1.2 && Math.abs(c.x0 - DIV) < lh * 2.5 && /^[ilI1|!¦:;.,'`´・：\-_~"丨]+$/.test(c.t)) && !(c.y1 - c.y0 < lh * 0.65 && /^[ぁ-んァ-ヶー]{2,8}$/.test(c.t)));   // 点線、ふりがな
   CH = noDots(CH);
-  // 例文：左の段から始まる、幅の広い英語の行（先頭が読み間違えられて小文字になっていても、4語以上なら例文とみなす）
-  const SENT = CH.filter(c => wideEn(c) && c.x0 < DIV - lh && jaN(c.t) <= 3 && !/[\/（）［］]/.test(c.t) && nWords(c.t) >= 3 && (nWords(c.t) >= 4 || /^["“‘'(]?[A-Z]/.test(enText(c.t)))).sort((a, b) => a.y - b.y);
-  const used = new Set(SENT), units = [];
-  for (const c of SENT) {
-    const u = units[units.length - 1];
-    if (u && c.y - u.lastY < lh * 2) { u.en += ' ' + enText(c.t); u.lastY = c.y; u.bot = c.y1; u.ry1 = Math.max(u.ry1, c.ry1); u.cf.push(c.cf); continue; }
-    units.push({en: enText(c.t), x0: c.x0, top: c.y0, lastY: c.y, bot: c.y1, ry0: c.ry0, ry1: c.ry1, cf: [c.cf]});
+  // 例文：青みがかった帯の中の行（帯の中がうまく読めていなくても、後で英語専用の設定で読み直す）。
+  // 帯が見つからない所では、左の段から始まる幅の広い英語らしい行（大文字だらけの読み間違いなどは除く）
+  const bands = tintBands(ex.tint, lh), rawY = c => (c.ry0 + c.ry1) / 2;
+  const inBand = c => bands.find(b => rawY(c) >= b.y0 - lh * 0.4 && rawY(c) <= b.y1 + lh * 0.4);
+  const engOK = t => { const L = (t.match(/[A-Za-z]/g) || []).length, U = (t.match(/[A-Z]/g) || []).length, tk = t.split(/\s+/).filter(x => /[A-Za-z]/.test(x)); return L >= 10 && U <= Math.max(2, L * 0.2) && tk.filter(x => /^[("“‘']?[A-Za-z][a-z'’\-]*[.,;:!?"”’)]*$/.test(x)).length >= tk.length * 0.7; };
+  const SENT = CH.filter(c => !inBand(c) && !bands.some(b => Math.abs(rawY(c) - (b.y0 + b.y1) / 2) < lh * 3) && wideEn(c) && c.x0 < DIV - lh && jaN(c.t) <= 3 && !/[\/（）［］]/.test(c.t) && nWords(c.t) >= 3 && (nWords(c.t) >= 4 || /^["“‘'(]?[A-Z]/.test(enText(c.t))) && engOK(enText(c.t))).sort((a, b) => a.y - b.y);
+  const used = new Set(SENT), units = [], cy = y => y - slope * W / 2;
+  for (const b of bands) {
+    const cs = CH.filter(c => inBand(c) === b).sort((a, c) => a.y - c.y), es = cs.filter(c => enN(c.t) >= 2 && jaN(c.t) <= 3);
+    cs.forEach(c => used.add(c));
+    const ee = []; for (const c of es) { if (ee.length && /[.?!]["”’]?$/.test(ee[ee.length - 1])) break; ee.push(enText(c.t)); }
+    units.push({en: ee.join(' ').replace(/\s+/g, ' ').trim(), x0: es.length ? Math.min(...es.map(c => c.x0)) : 0, top: Math.min(cy(b.y0), ...cs.map(c => c.y0)), lastY: es.length ? es[es.length - 1].y : cy(b.y1),
+      bot: Math.max(cy(b.y1), ...cs.map(c => c.y1)), ry0: Math.min(b.y0, ...cs.map(c => c.ry0)), ry1: Math.max(b.y1, ...cs.map(c => c.ry1)), cf: es.length ? es.map(c => c.cf) : [0], band: 1});
   }
-  for (const u of units) for (let g = 0; g < 3 && !/[.?!"”’]$/.test(u.en); g++) {
+  const tu = [];
+  for (const c of SENT) {
+    const u = tu[tu.length - 1];
+    if (u && c.y - u.lastY < lh * 2) { u.en += ' ' + enText(c.t); u.lastY = c.y; u.bot = c.y1; u.ry1 = Math.max(u.ry1, c.ry1); u.cf.push(c.cf); continue; }
+    tu.push({en: enText(c.t), x0: c.x0, top: c.y0, lastY: c.y, bot: c.y1, ry0: c.ry0, ry1: c.ry1, cf: [c.cf]});
+  }
+  units.push(...tu); units.sort((a, b) => a.top - b.top);
+  for (const u of tu) for (let g = 0; g < 3 && !/[.?!"”’]$/.test(u.en); g++) {
     const nx = CH.filter(c => !used.has(c) && c.y > u.lastY && c.y - u.lastY < lh * 2.4 && c.x0 < DIV && c.x0 <= u.x0 + lh * 1.5 && jaN(c.t) <= 1 && /[A-Za-z]/.test(c.t)).sort((a, b) => a.y - b.y)[0];
     if (!nx) break;
     used.add(nx); u.en += ' ' + enText(nx.t); u.lastY = nx.y; u.bot = nx.y1; u.ry1 = Math.max(u.ry1, nx.ry1); u.cf.push(nx.cf);
@@ -1057,7 +1292,7 @@ function pageScan(data, W, H, ex) {
   // 読み直す範囲：例文の帯（英語）、その下の左の段（英語）と右の段（日本語）
   const addRect = (kind, unit, x, y, w, h) => { x = Math.max(0, Math.round(x)); y = Math.max(0, Math.round(y)); w = Math.min(W - x, Math.round(w)); h = Math.min(H - y, Math.round(h)); if (w > lh && h > lh * 0.8) rects.push({kind, unit, x, y, w, h}); };
   units.forEach((u, k) => {
-    addRect('sent', k, 0, u.ry0 - lh * 0.5, W, u.ry1 - u.ry0 + lh);
+    addRect('sent', k, 0, u.ry0 - lh * 0.5, Math.min(W, EDGE + lh * 2), u.ry1 - u.ry0 + lh);
     const y0 = u.ry1 + lh * 0.2, y1 = k + 1 < units.length ? units[k + 1].ry0 - lh * 0.2 : H;
     addRect('left', k, 0, y0, DIV - lh * 0.3, y1 - y0);
     addRect('right', k, DIV - lh * 0.6, y0, Math.min(W, EDGE + lh) - (DIV - lh * 0.6), y1 - y0);
@@ -1074,6 +1309,13 @@ function pageScan(data, W, H, ex) {
     if (nc.length < 3) continue;
     Rc = Rc.filter(c => !(c.y > top && c.y < bot)).concat(nc); RJ.push(...nc);
   }
+  // 囲みの中か（曲がった囲みでも、その位置の上下の辺の間にあるか）
+  const inBox = (b, x, y) => { if (x < b.x0 - lh || x > b.x1) return false; const i = Math.max(0, Math.min(b.tp.length - 1, Math.round((x - b.x0) / 8))), t = b.tp[i], u = b.bp[i]; return t != null && u != null && u - t > lh ? y > t + lh * 0.2 && y < u - lh * 0.1 : y > b.y0 + lh * 0.25 && y < b.y1 - lh * 0.15; };
+  const JB = [];
+  for (const j of ex.jb || []) {
+    const b = j.box, nc = noDots(chunks(j.lines.map(wordsOf).map(undot))).filter(c => inBox(b, c.x0 + lh, (c.ry0 + c.ry1) / 2));
+    if (nc.some(c => JPRE.test(c.t))) { Rc = Rc.filter(c => !inBox(b, c.x0 + lh, (c.ry0 + c.ry1) / 2)).concat(nc); JB.push(...nc); }
+  }
   const rows = cs => {
     const rs = [];
     for (const c of cs.slice().sort((a, b) => a.y - b.y)) {
@@ -1086,10 +1328,20 @@ function pageScan(data, W, H, ex) {
       // 行の先頭の品詞の四角が品詞以外の文字（名 → 多 など）に読まれたものは外す
       if (cs.length > 1 && /^[ぁ-んァ-ヶ一-龠々]$/.test(cs[0].t) && !/[名動形副前接助感構頭尾代定]/.test(cs[0].t) && cs[1].x0 - cs[0].x1 > lh * 0.6) { cs = cs.slice(1); posBad = true; }
       const ws = r.cs.flatMap(c => c.ws);
-      return {t: cs.map(c => c.t).join(' '), x0: r.cs[0].x0, y: r.cs[0].y, y0: r.y0, y1: r.y1, posBad, cf: ws.reduce((a, w) => a + w.cf, 0) / ws.length};
+      return {t: cs.map(c => c.t).join(' '), x0: r.cs[0].x0, y: r.cs[0].y, ry: (r.cs[0].ry0 + r.cs[0].ry1) / 2, y0: r.y0, y1: r.y1, posBad, cf: ws.reduce((a, w) => a + w.cf, 0) / ws.length};
     }).sort((a, b) => a.y - b.y);
   };
   const Rrows = rows(Rc.filter(c => c.x0 <= EDGE - lh)), Lrows = rows(Lc);
+  // 和訳の囲み：右の段の長い横線2本（上下の辺）。その間の行を和訳とする
+  const HL = ((ex.marks || {}).hl || []).filter(l => l.x0 >= DIV - lh * 1.5 && l.x1 - l.x0 >= (EDGE - DIV) * 0.4)
+    .map(l => ({x0: l.x0, x1: l.x1, cy0: l.y0 - slope * (l.x0 + l.x1) / 2, cy1: l.y1 - slope * (l.x0 + l.x1) / 2})).sort((a, b) => a.cy0 - b.cy0);
+  // （例文が前のページにある時も使えるように、例文に関係なく探す。裏写りの枠などを除くため、中に日本語の行があるものだけ）
+  // 囲みの左の辺は意味の段の書き出しにそろっている（裏写りの枠などは外れる）
+  const boxes = ((ex.marks || {}).boxes || []).filter(b => b.x0 >= DIV - lh * 1.5 && (!TX || Math.abs(b.x0 - TX) < lh * 1.8) && b.x1 - b.x0 >= (EDGE - DIV) * 0.5);
+  for (const b of boxes) {
+    const inB = Rrows.filter(r => inBox(b, r.x0 + lh, r.ry));
+    if (inB.some(r => JPRE.test(r.t))) { inB.forEach(r => { r.tr = 1; }); b.ok = 1; }
+  }
   // 英語専用で読み直した結果：例文は読み直した方を使い、左の段は読み直した方を先に探す
   const E = ex.eng || [];
   const LcE = chunks(E.filter(e => e.kind === 'left').flatMap(e => e.lines).map(wordsOf).map(undot)).filter(c => c.x0 < DIV);
@@ -1100,6 +1352,7 @@ function pageScan(data, W, H, ex) {
     for (const ws of ls) { const r = rowsS[rowsS.length - 1]; if (r && Math.abs(yc(ws[0]) - yc(r[0])) < lh * 0.5) r.push(...ws); else rowsS.push(ws.slice()); }
     const parts = [], cf = [];
     for (let ws of rowsS) {
+      if (parts.length && /[.?!]["”’]?$/.test(parts[parts.length - 1])) break;   // 文の終わりの後（帯の中の別の行）
       ws.sort((a, b) => a.x0 - b.x0);
       while (ws.length > 1 && ws[0].t.length <= 2 && ws[1].x0 - ws[0].x1 > lh * 0.8) ws = ws.slice(1);                  // 帯の左の太線などの読み取り
       while (ws.length > 1 && ws[ws.length - 1].x0 - ws[ws.length - 2].x1 > lh * 1.5) ws = ws.slice(0, -1);             // 右に離れた読み取り（隣のページなど）
@@ -1110,16 +1363,19 @@ function pageScan(data, W, H, ex) {
     return nWords(t) >= 3 && enN(t) >= 10 ? {t, cf} : null;
   };
   units.forEach((u, k) => { const re = engSent(k); if (re) { u.en = re.t; u.cf = re.cf.length ? re.cf : u.cf; } });
-  const tag = c => used.has(c) ? '文' : c.x0 >= DIV ? '右' : '左', dbg = [`幅${W} 境目${Math.round(DIV)} 行の高さ${Math.round(lh)} 傾き${slope.toFixed(3)} 例文${units.length}件`];
+  const MK = ex.marks || {}, nk = q => (MK.frames || []).filter(f => f.kind === q).length;
+  const tag = c => used.has(c) ? '文' : c.x0 >= DIV ? '右' : '左', dbg = [`幅${W} 境目${Math.round(DIV)}${divInfo} 行の高さ${Math.round(lh)} 傾き${slope.toFixed(3)} 例文${units.length}件（帯${bands.length}） 品詞の四角${nk('p')} 記号${nk('m')} チェック欄${nk('b')} 和訳の囲み${boxes.filter(b => b.ok).length}`];
+  if (HL.length) dbg.push('罫線 ' + HL.map(l => `${Math.round(l.cy0)}:${l.x0}-${l.x1}`).join(' '));
   units.forEach((u, k) => dbg.push(`英文${k + 1}：${u.en}`));
   for (const c of CH.slice().sort((a, b) => a.y - b.y)) dbg.push(`${tag(c)} ${Math.round(c.x0)},${Math.round(c.y)} ${c.t}`);
   for (const c of LcE.slice().sort((a, b) => a.y - b.y)) dbg.push(`左E ${Math.round(c.x0)},${Math.round(c.y)} ${c.t}`);
   for (const c of RJ.slice().sort((a, b) => a.y - b.y)) dbg.push(`右J ${Math.round(c.x0)},${Math.round(c.y)} ${c.t}`);
+  for (const c of JB) dbg.push(`和J ${Math.round(c.x0)},${Math.round(c.y)} ${c.t}`);
   // 2枚の順番を決める手がかり：最初の例文より上に意味の行があるか、最後の例文の和訳が写っていないか
   const last = units[units.length - 1];
   const hasLead = Rrows.some(r => !units.length || r.y < units[0].top);
   const lastOpen = !!last && !Rrows.some(r => r.y > last.bot && JPRE.test(r.t) && JAEND.test(trimEdge(r.t)));
-  return {W, H, lh, DIV, units, Rrows, Lrows, LrowsE, rects, dbg, hasLead, lastOpen};
+  return {W, H, lh, DIV, units, Rrows, Lrows, LrowsE, rects, dbg, hasLead, lastOpen, jboxes: boxes};
 }
 // 1枚、または続けて撮った2枚の写真（pageScan の結果、ページの順）から、英文・和訳・見出し語・意味を取り出す。
 // lt：テキスト認識でコピーした文章（あれば文字はこちらを使い、どの語の行かは写真の位置で決める）
@@ -1153,7 +1409,7 @@ function buildPhoto(pages, lt) {
     const ws = [], seen = new Set();
     for (let i = 0; i < rL.length; i++) {
       const r = rL[i]; if (r.y > maxY) break;
-      let hw = hwFrom(r.t, en); if (!hw) continue;
+      let hw = caseFix(hwFrom(r.t, en), en); if (!hw) continue;
       const r2 = rL[i + 1];
       if (r2 && r2.y - r.y < lh * 2.2) { const h2 = hwFrom(r.t + ' ' + r2.t, en); if (h2 && toks(h2).length > toks(hw).length) { hw = h2; i++; } }
       const key = norm(hw); if (seen.has(key)) continue;
@@ -1165,9 +1421,18 @@ function buildPhoto(pages, lt) {
   // テキスト認識でコピーした文章（あれば）：例文ごとに区切り、写真の例文と一致したところの文字を使う（どの語の行かは写真の位置で決める）
   const LT = lt ? ltBlocks(lt) : null, asgDbg = [];
   let ltCand = 0, ltHit = 0;
+  // 文章がある時は、例文の数と区切りを文章に合わせる：よく一致するものから対応づけ、残りは順番を保って一番近いもの同士を対応づける。
+  // 文章のどの例文にも対応しない写真の「例文」は読み間違いなので、前の例文の範囲に含める
+  if (LT && LT.length && units.length) {
+    const S = units.map(u => LT.map(b => ovl(bigr(b.en), bigr(u.en)) + (u.band ? 0.05 : 0)));
+    const pairs = []; units.forEach((u, i) => LT.forEach((b, j) => pairs.push([S[i][j], i, j]))); pairs.sort((a, b) => b[0] - a[0]);
+    const ok = (i, j) => units.every((u, q) => u.bi == null || (q < i ? u.bi < j : q > i ? u.bi > j : false));
+    for (const [v, i, j] of pairs) if (v >= 0.45 && units[i].bi == null && !LT[j].used && ok(i, j)) { units[i].bi = j; LT[j].used = true; }
+    for (const [v, i, j] of pairs) if (units[i].bi == null && !LT[j].used && ok(i, j)) { units[i].bi = j; LT[j].used = true; }
+    if (units.some(u => u.bi != null)) units = units.filter(u => u.bi != null);
+  }
   units.forEach((u, k) => {
-    let blk = null;
-    if (LT) { let bs = 0; for (const b of LT) { if (b.used) continue; const v = ovl(bigr(b.en), bigr(u.en)); if (v > bs) { bs = v; blk = b; } } if (blk && bs >= 0.45) blk.used = true; else blk = null; }
+    const blk = LT && u.bi != null ? LT[u.bi] : null;
     if (blk) u.en = blk.en;
     const bot = k + 1 < units.length ? units[k + 1].top : Infinity, label = u.en.slice(0, 16);
     const chkS = [], noteS = v => { if (!chkS.includes(v)) chkS.push(v); };
@@ -1175,9 +1440,12 @@ function buildPhoto(pages, lt) {
     const rR = Rrows.filter(r => r.y > u.bot && r.y < bot).map(r => Object.assign({}, r, {t: cleanRow(r.t)}));
     // 和訳：右の段の最後の「。」で終わる行（前の行に続いていればつなぐ）
     let te = -1, ts = -1, ja = '';
-    for (let i = rR.length - 1; i >= 0; i--) if (JPRE.test(rR[i].t) && /。[」』]?[^ぁ-んァ-ヶ一-龠々。]{0,3}$/.test(trim(rR[i].t))) { te = i; break; }
+    const trI = []; rR.forEach((r, i) => { if (r.tr) trI.push(i); });
+    if (trI.length) { ts = trI[0]; te = trI[trI.length - 1]; }   // 和訳の囲みの中の行
+    else for (let i = rR.length - 1; i >= 0; i--) if (JPRE.test(rR[i].t) && /。[」』]?[^ぁ-んァ-ヶ一-龠々。]{0,3}$/.test(trim(rR[i].t))) { te = i; break; }
+    if (te < 0 && rR.length) { const z = trim(rR[rR.length - 1].t); if ((z.match(/[ぁ-んァ-ヶ一-龠々]/g) || []).length >= 6 && /[、，,.・]$/.test(z) && !posOf(z) && !/[（）()［］\[\]【】①-⑳]/.test(z)) { te = rR.length - 1; noteS('和訳の終わりの「。」が読み取れなかったので、最後の行を和訳としました。本と見比べてください'); } }
     if (te >= 0) {
-      ts = te; while (ts > 0 && te - ts < 2 && plainJa(trim(rR[ts - 1].t)) && rR[ts].y - rR[ts - 1].y < lh * 2.2) ts--;
+      if (!trI.length) { ts = te; while (ts > 0 && te - ts < 2 && plainJa(trim(rR[ts - 1].t)) && rR[ts].y - rR[ts - 1].y < lh * 2.2) ts--; }
       ja = rR.slice(ts, te + 1).map(r => trim(r.t)).join('').replace(/([^\x00-\x7f])\s+(?=[^\x00-\x7f])/g, '$1').replace(/(。[」』]?)[^。]*$/, '$1').trim();
     } else if (blk) { te = ts = rR.length; }
     else { skipped.push(label); return; }
@@ -1192,7 +1460,14 @@ function buildPhoto(pages, lt) {
     if (blk) {
       const L = blk.L, usedL = new Set(); for (let i = 0; i < blk.i1; i++) usedL.add(i);
       let tb = -1; for (let i = L.length - 1; i >= blk.i1; i--) if (JPRE.test(L[i]) && /。[」』]?$/.test(L[i])) { tb = i; break; }
-      if (tb >= 0) { let t0 = tb; while (t0 - 1 >= blk.i1 && tb - t0 < 2 && plainJa(L[t0 - 1])) t0--; ja = L.slice(t0, tb + 1).join(''); u.jaLT = true; for (let i = t0; i <= tb; i++) usedL.add(i); }
+      if (tb >= 0) {
+        let t0 = tb;
+        // 和訳の行数：写真で和訳が見つかっていれば、それに一番近くなる行数（前の意味の行を和訳に含めないように）
+        const pj = te < rR.length ? ja : '';
+        if (pj && JPRE.test(pj)) { let bv = -1; for (let a = tb; a >= Math.max(blk.i1, tb - 2); a--) { if (a < tb && !plainJa(L[a])) break; const v = dice(bigr(L.slice(a, tb + 1).join('')), bigr(pj)); if (v > bv + 0.02) { bv = v; t0 = a; } } }
+        else while (t0 - 1 >= blk.i1 && tb - t0 < 2 && plainJa(L[t0 - 1])) t0--;
+        ja = L.slice(t0, tb + 1).join(''); u.jaLT = true; for (let i = t0; i <= tb; i++) usedL.add(i);
+      }
       const ltH = [];
       for (let i = blk.i1; i < L.length; i++) {
         if (usedL.has(i)) continue;
@@ -1206,11 +1481,18 @@ function buildPhoto(pages, lt) {
         ltH.push(hw); for (let q = i; q <= i2; q++) usedL.add(q); if (PRON.test(L[i2 + 1] || '')) usedL.add(i2 + 1);
       }
       const Lall = LrowsE.filter(inU).concat(Lrows.filter(inU));
-      for (const hw of ltH) {
-        const w0 = words.find(w => norm(w.hw) === norm(hw)); if (w0) { w0.hw = hw; continue; }
-        const hb = bigr(hw); let best = null, bs = 0;
-        for (const r of Lall) { if (r.y > maxY || words.some(w => Math.abs(w.y - r.y) < lh * 0.8)) continue; const v = inc(hb, bigr(r.t)); if (v > bs) { bs = v; best = r; } }
-        if (best && bs >= 0.5) words.push({hw, y: best.y}); else missing.push(hw);
+      if (ltH.length) {
+        // 文章の見出し語を正とし、写真の見出し語（の位置）を綴りの近さで上から順に対応づける。文章に無い写真の見出し語は読み間違いとして捨てる
+        const pw = words.splice(0).sort((a, b) => a.y - b.y), near = r => words.some(w => Math.abs(w.y - r.y) < lh * 0.8) || pw.some(w => w.used && Math.abs(w.y - r.y) < lh * 0.8);
+        let lastY = -Infinity;
+        for (const hw of ltH) {
+          const hb = bigr(hw); let best = null, bs = 0;
+          for (const w of pw) { if (w.used || w.y <= lastY) continue; const wb = bigr(w.hw), v = norm(w.hw) === norm(hw) ? 1 : Math.max(inc(hb, wb), inc(wb, hb)); if (v > bs) { bs = v; best = w; } }
+          if (best && bs >= 0.5) { best.used = true; words.push({hw, y: best.y}); lastY = best.y; continue; }
+          let br = null; bs = 0;
+          for (const r of Lall) { if (r.y > maxY || r.y <= lastY || near(r)) continue; const v = inc(hb, bigr(r.t)); if (v > bs) { bs = v; br = r; } }
+          if (br && bs >= 0.5) { words.push({hw, y: br.y}); lastY = br.y; } else missing.push(hw);
+        }
       }
       bl = {L, usedL, order: ltH.map(norm)};
     }
@@ -1349,22 +1631,69 @@ async function ocrPages(files) {
       cur = files.length > 1 ? `${i + 1}/${files.length}枚目` : '写真';
       step = 'を読み取っています'; prog(true, cur + step + '…', 0);
       const im = await loadImg(files[i]), cv = prepImg(im), d1 = await rec(cv, '3');
-      pages.push({im, k: cv.__k, d1, W: cv.width, H: cv.height, pre: pageScan(d1, cv.width, cv.height), name: cur, rj: [], eng: [], crops: []});
+      const p = {im, k: cv.__k, d1, W: cv.width, H: cv.height, tint: cv.__tint, name: cur, rj: [], eng: [], jb: [], rc: [], crops: [], marks: null};
+      const pre = pageScan(d1, p.W, p.H, {tint: p.tint});
+      // 写真の画素から、品詞の四角・記号の四角・チェック欄・和訳の囲みの線を探し、四角の中身をまとめて読む
+      if (pre.lh) {
+        step = 'の記号を調べています'; prog(true, cur + step + '…', 0);
+        try {
+          p.marks = findMarks(cv, pre);
+          const fr = p.marks.frames.filter(f => !f.kind && f.fill >= 0.03);
+          if (fr.length) frameKinds(fr, await rec(frameStrip(cv, fr), '6'));
+          const fq = p.marks.frames.filter(f => f.kind === 'q');
+          if (fq.length) {
+            await worker.setParameters({tessedit_char_whitelist: POSCH});
+            const d = await rec(frameStrip(cv, fq), '6'); await worker.setParameters({tessedit_char_whitelist: ''});
+            const tq = fq.map(() => ''); for (const l of ocrLines(d)) for (const w of (l.words || [])) { if (!w.bbox) continue; const i = Math.round(((w.bbox.y0 + w.bbox.y1) / 2 - 20 - STRIP.T / 2) / (STRIP.T + STRIP.G)); if (i >= 0 && i < fq.length) tq[i] += String(w.text || '').replace(/\s+/g, ''); }
+            fq.forEach((f, i) => { if (tq[i].length && POSCH.includes(tq[i][0])) { f.kind = 'p'; f.pos = tq[i][0]; f.txt += '→' + tq[i][0]; } });
+          }
+        } catch (e) { p.marks = null; }
+      }
+      p.pre = pageScan(d1, p.W, p.H, {tint: p.tint, marks: p.marks});
+      pages.push(p);
     }
     // 2枚の時は、ページの続きになる順に並べる
     pages = pageOrder(pages.map(p => p.pre)).map(i => pages[i]);
     // 右の段（意味）を切り出して読み直す。2枚目は、最初の例文より上（前のページの続き）も読み直す
     for (let i = 0; i < pages.length; i++) {
       const p = pages[i]; cur = p.name;
+      const M = p.marks || {frames: [], hl: [], vl: [], boxes: []}, side = f => { const d = Math.max(2, Math.round((f.x1 - f.x0) * 0.08)); return [{x0: f.x0, x1: f.x1, y0: f.y0, y1: f.y0 + d}, {x0: f.x0, x1: f.x1, y0: f.y1 - d, y1: f.y1}, {x0: f.x0, x1: f.x0 + d, y0: f.y0, y1: f.y1}, {x0: f.x1 - d, x1: f.x1, y0: f.y0, y1: f.y1}]; };
+      const er = M.frames.filter(f => f.kind && f.kind !== 'q').concat(...M.frames.filter(f => f.kind === 'q').map(side), M.hl, M.vl, ...(p.pre.jboxes || []).map(b => b.er));   // 囲みの線は、意味の段にそろった囲み（裏写りの枠などを除く）だけ消す
       for (const rc of p.pre.rects) {
         if (rc.unit < 0 && i === 0) continue;
-        const c = cropImg(p.im, p.k, rc);
-        if (rc.kind === 'right') { step = 'の意味の段を読み直しています'; prog(true, cur + step + '…', 0); p.rj.push({unit: rc.unit, lines: shiftLines(await rec(c, '4'), c.__ox, c.__oy, c.__m)}); }
+        const inR = r => r.x1 >= rc.x && r.x0 <= rc.x + rc.w && r.y1 >= rc.y && r.y0 <= rc.y + rc.h;
+        const c = cropImg(p.im, p.k, rc, rc.kind === 'sent' ? null : er.filter(inR));
+        if (rc.kind === 'right') p.rc.push({rc, c, pf: M.frames.filter(f => f.kind === 'p' && inR(f))});
         else p.crops.push({rc, c});
       }
+      // 和訳の囲みの中（枠の線は消す）
+      p.jc = (p.pre.jboxes || []).map(b => { const rc = {x: b.x0 + p.pre.lh * 0.25, y: b.y0, w: b.x1 - b.x0 - p.pre.lh * 0.5, h: b.y1 - b.y0}; return {box: b, c: cropImg(p.im, p.k, rc, er.filter(r => r.x1 >= rc.x && r.x0 <= rc.x + rc.w && r.y1 >= rc.y && r.y0 <= rc.y + rc.h))}; });
       p.im = null;
     }
     await Promise.resolve(worker.terminate()); worker = null;
+    // 意味の段と和訳は日本語専用の設定で読み直す（日本語と英語の設定では「来月」「妖精」などが英字に読まれることがある。英語の語も読める）
+    if (pages.some(p => p.rc.length || (p.jc && p.jc.length))) {
+      worker = await T.createWorker('jpn', 1, {logger});
+      for (const p of pages) {
+        cur = p.name;
+        for (const {rc, c, pf} of p.rc) {
+          step = 'の意味の段を読み直しています'; prog(true, cur + step + '…', 0);
+          // 品詞の四角は消して読み、四角の中身として読み取った品詞を、その位置の文字として補う
+          const ls = shiftLines(await rec(c, '4'), c.__ox, c.__oy, c.__m);
+          for (const f of pf) {
+            const w = {text: f.pos, confidence: 95, sp: 1, bbox: {x0: f.x0, y0: f.y0, x1: f.x1, y1: f.y1}};
+            let best = null, bo = 0;
+            for (const l of ls) { if (!l.words.length) continue; const y0 = Math.min(...l.words.map(v => v.bbox.y0)), y1 = Math.max(...l.words.map(v => v.bbox.y1)), o = Math.min(y1, f.y1) - Math.max(y0, f.y0); if (o > bo) { bo = o; best = l; } }
+            if (best && bo > (f.y1 - f.y0) * 0.4) best.words.push(w); else ls.push({words: [w]});
+          }
+          p.rj.push({unit: rc.unit, lines: ls});
+        }
+        step = 'の和訳を読み直しています';
+        for (const {box, c} of p.jc || []) { prog(true, cur + step + '…', 0); p.jb.push({box, lines: shiftLines(await rec(c, '6'), c.__ox, c.__oy, c.__m)}); }
+        p.rc = []; p.jc = null;
+      }
+      await Promise.resolve(worker.terminate()); worker = null;
+    }
     // 2回目：例文と左の段（見出し語）を、英語専用の設定で読み直す
     if (pages.some(p => p.crops.length)) {
       worker = await T.createWorker('eng', 1, {logger});
@@ -1378,6 +1707,8 @@ async function ocrPages(files) {
     return pages;
   } catch (e) { if (worker) Promise.resolve(worker.terminate()).catch(() => {}); throw e; }
 }
+// 読み取り結果（1回目・読み直し・画素の解析）から、各ページの配置を調べる
+function scanAll(pages) { return pages.map(p => pageScan(p.d1, p.W, p.H, {eng: p.eng, rj: p.rj, jb: p.jb, tint: p.tint, marks: p.marks})); }
 function ocrErr(e) { return e && e.message === 'load' ? '文字認識の部品を読み込めませんでした。電波のある所でもう一度試してください。' : '写真を読み取れませんでした。\n理由：' + String((e && (e.message || e)) || '不明'); }
 function ocrOk() {
   if (OCRBUSY) { alert('写真を読み取っている途中です。終わるまでお待ちください。'); return false; }
@@ -1391,7 +1722,7 @@ async function photoImport(files) {
   OCRBUSY = true; prog(true, '文字認識を準備しています…', 0);
   try {
     const pages = await ocrPages(files);
-    const res = buildPhoto(pages.map(p => pageScan(p.d1, p.W, p.H, {eng: p.eng, rj: p.rj})));
+    const res = buildPhoto(scanAll(pages));
     all.push(...res.out); skipped.push(...res.skipped); raws.push(res.raw);
   } catch (e) { alert(ocrErr(e)); return; }
   finally { OCRBUSY = false; prog(false); }
@@ -1407,7 +1738,7 @@ async function hybridImport() {
   const sec = DSEC;
   let res = null;
   OCRBUSY = true; prog(true, '文字認識を準備しています…', 0);
-  try { const ps = await ocrPages(files); res = buildPhoto(ps.map(p => pageScan(p.d1, p.W, p.H, {eng: p.eng, rj: p.rj})), text); }
+  try { res = buildPhoto(scanAll(await ocrPages(files)), text); }
   catch (e) { alert(ocrErr(e)); return; }
   finally { OCRBUSY = false; prog(false); }
   RAW = `【写真と文章】版 ${APP_VER}\n` + res.raw;
@@ -1420,8 +1751,19 @@ async function hybridImport() {
 }
 function bphShow() {
   const n = document.getElementById('bphn'), x = document.getElementById('bphx'); if (!n) return;
-  n.textContent = BPH ? `写真：${BPH.map(f => f.name).join('、')}` : '同じページの写真も選ぶと、単語への振り分けが正確になります（ページをまたぐ時は2枚まで）';
+  n.textContent = BPH ? `${BPH.length}枚：${BPH.map(f => f.name).join('、')}` : 'まだ選んでいません';
   if (x) x.hidden = !BPH;
+  impMode();
+}
+// 写真と文章のどちらがあるかで、取り込み方を知らせる
+function impMode() {
+  const m = document.getElementById('imode'), b = document.getElementById('btxt'); if (!m || !b) return;
+  const t = !!b.value.trim(), p = !!(BPH && BPH.length);
+  m.textContent = p && t ? '写真と文字の両方を使います。文字は貼り付けた文字から、単語への振り分けは写真の位置から取るので、いちばん正確です。'
+    : p ? '写真だけで読み取ります。文字の読み間違いが出やすいので、取り込んだ後に本と見比べてください（文字も貼り付けると正確になります）。'
+    : t ? '貼り付けた文字だけで振り分けます（同じページの写真も選ぶと、単語への振り分けが正確になります）。'
+    : '写真を選ぶか、文字を貼り付けてください。';
+  m.classList.toggle('best', p && t);
 }
 
 /* ===== 確認が必要なところ：取り込み時の記録（chk）と、今の内容から分かるもの ===== */
@@ -1519,9 +1861,9 @@ function onClick(e) {
     case 'data': DSEC = null; go('data'); break;
     case 'dpick': pickSec(+d.s); break;
     case 'addS': addS(); break;
-    case 'bulk': $('#bulk').hidden = false; $('#btxt').focus(); break;
+    case 'bulk': $('#bulk').hidden = false; impMode(); $('#bulk').scrollIntoView({block: 'start', behavior: 'smooth'}); break;
     case 'bclose': $('#bulk').hidden = true; break;
-    case 'bimp': if (BPH && BPH.length) hybridImport(); else bulkImport(); break;
+    case 'bimp': { const t = $('#btxt').value.trim(), ph = BPH && BPH.length; if (ph && t) hybridImport(); else if (ph) { const fs = BPH; BPH = null; photoImport(fs); } else if (t) bulkImport(); else alert('写真を選ぶか、文字を貼り付けてください。'); break; }
     case 'bphx': BPH = null; bphShow(); break;
     case 'ackW': case 'ackS': ackItem(d.id); break;
     case 'openChk': openChk(); break;
@@ -1543,9 +1885,9 @@ function onChange(e) {
   const t = e.target;
   if (t.dataset && t.dataset.f) onInput(e);
   else if (t.id === 'ra' || t.id === 'rb') { UI[t.id === 'ra' ? 'a' : 'b'] = +t.value; store(K.u, UI); vHome(); }
+  else if (t.id === 'qn') { UI.qn = +t.value || 0; store(K.u, UI); }
   else if (t.id === 'dsec') pickSec(+t.value);
   else if (t.id === 'bphf' && t.files && t.files[0]) { const fs = [...t.files]; t.value = ''; if (fs.length > 2) { alert('写真は2枚まで選べます。'); return; } BPH = fs; bphShow(); }
-  else if (t.id === 'phf' && t.files && t.files.length) { const fs = [...t.files]; t.value = ''; photoImport(fs); }
   else if (t.id === 'impf' && t.files && t.files[0]) { const f = t.files[0]; t.value = ''; importData(f); }
 }
 if (typeof document !== 'undefined') {
