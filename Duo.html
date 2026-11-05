@@ -178,7 +178,7 @@ label.btn{position:relative;display:flex;align-items:center;justify-content:cent
 /* ===== 保存（この端末のブラウザ内だけ） ===== */
 const K = {d: 'duoApp:data', p: 'duoApp:prog', u: 'duoApp:ui'};
 const NSEC = 45;
-const APP_VER = '2026-11-06 07:00';   // 更新するたびに変える
+const APP_VER = '2026-11-06 08:00';   // 更新するたびに変える
 function load(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } }
 function store(k, v) {
   try { localStorage.setItem(k, JSON.stringify(v)); return true; }
@@ -525,7 +525,7 @@ function vData() {
     `<div class="panel pad"><div class="range">Section <select id="dsec" aria-label="セクション">${secOpts(DSEC)}</select><span class="small sub">英文${S.length}文、単語${S.reduce((a, s) => a + s.w.length, 0)}語</span></div>
 <div class="addrow"><button class="add" data-act="addS">英文を追加<i aria-hidden="true">＋</i></button><button class="add" data-act="bulk">写真・文章から取り込む</button></div>
 <div id="ocrp" class="ocrp"${OCRBUSY ? '' : ' hidden'}><p class="small" id="ocrm"></p><progress id="ocrb" max="1" value="0"></progress></div>
-${RAW ? `<details class="raw"><summary class="small sub">写真から読み取った文字（うまく取り込めない時の確認用）</summary><textarea readonly rows="8">${esc(RAW)}</textarea></details>` : ''}
+${RAW ? `<details class="raw"><summary class="small sub">写真から読み取った文字（うまく取り込めない時の確認用）</summary><button class="sm" data-act="rawcp">すべてコピー</button><textarea readonly rows="8">${esc(RAW)}</textarea></details>` : ''}
 <div class="cks" id="cks" hidden></div>
 <div id="bulk" class="imp" hidden>
 <div class="ist"><span class="isn">1</span><div class="isb"><b>本のページの写真を選ぶ</b><span class="small sub">ページをまたぐ時は、続きの2枚まで</span>
@@ -631,7 +631,7 @@ const JPRE = /[ぁ-んァ-ヶ一-龠々]/;
 const HWRE = /^[A-Za-z0-9 .…'’\-()\/~〜～,!?]+$/;
 const POSRX = /^([名動形副前接助感構頭尾代定])(?=[回口]|[^ぁ-んァ-ヶ一-龠々]|$)/;   // 四角で囲まれた品詞の記号
 const POSALT = {'图': '名', '図': '名', 'Z': '名', '#': '形'};                    // 派生語の後ろの品詞の記号の読み間違い
-const JUNK = /^[\s　□口|・•]+/;                                             // □（チェック欄）などの読み取り
+const JUNK = /^[\s　□口|｜・•]+/;                                             // □（チェック欄）などの読み取り
 const DASH = /^[━ーｰ\-－—―一]+\s*/;                                             // 「━」＝同じ単語の別の品詞
 const PRON = /^[^ぁ-んァ-ヶ一-龠々]*[A-Za-z][^ぁ-んァ-ヶ一-龠々]*[（(](?=[^）)]*[ァ-ヶ])[ァ-ヶぁ-んー・\s\[\]［］\/\-－]+[）)][\]］」』〕]?$/; // 発音
 const STOPW = new Set('of to in on at for the a an and or but with by from as into about'.split(' '));
@@ -687,6 +687,7 @@ function splitHead(t, s, b) {
   const par = rest.match(/^[(（]\s*([A-Za-z]{0,8}\s*[.…‥]*|[.…‥]+)\s*[)）]\s*/); if (par && /^\s*[(（][^)）]*[)）]\s*[名動形副前接助感構頭尾代定图図]/.test(rest)) { wd += '(' + (par[1].replace(/[.‥…]+/g, '…').trim() || '…') + ')'; rest = rest.slice(par[0].length); }
   const alt = rest.match(/^[\[［]\s*([A-Za-z\u00C0-\u024F'’\- ]+?)\s*[\]］」｣]/); if (alt) { wd += '[' + alt[1] + ']'; rest = rest.slice(alt[0].length).replace(/^\s+/, ''); }
   const tl = rest.match(/^[~〜～一ー－]\s*(?=[名動形副前接助感構頭尾代定图図])/); if (tl) { wd += ' ～'; rest = rest.slice(tl[0].length); }
+  const dt = rest.match(/^[.・,]\s*(?=[名動形副前接助感構頭尾代定图図])/); if (dt) { wd += '…'; rest = rest.slice(dt[0].length); }
   if (/^[a-zÀ-ɏ]/.test(wd) && /[A-Z]/.test(wd)) wd = wd.toLowerCase();
   wd = deacc(wd).replace(/['’`´\d¹²³]+$/, '').replace(/…+/g, '…').replace(/\s+/g, ' ').trim();
   const w0 = wd.toLowerCase(), w1 = w0.slice(1);
@@ -717,7 +718,24 @@ function jaGroup(t, i) {
   return JA.test(g) && !/[A-Za-z]{2}/.test(g) && !/^\s*[↔←→]/.test(g) ? e : 0;
 }
 function jaAt(t, i) { return JA.test(t[i] || '') || (OPN.includes(t[i] || '') && jaGroup(t, i) > 0); }
-function jphrase(t, note) {
+function jphrase(t, note) { return jphraseAt(t, note)[0]; }
+function jparts(t, note) {
+  const out = []; let [x, i] = jphraseAt(t, note); if (x) out.push(x);
+  while (x && i < t.length) {
+    let k = i, skip = false;
+    while (k < t.length) {
+      if (/\s/.test(t[k])) { k++; continue; }
+      if (OPN.includes(t[k]) && t[k] !== '【' && !jaGroup(t, k)) { const e = grpEnd(t, k); if (e < 0 || /^\s*[↔←→]/.test(t.slice(k + 1, e))) { k = t.length; break; } k = e; skip = true; continue; }
+      break;
+    }
+    if (!skip || k >= t.length || !(JA.test(t[k]) || (OPN.includes(t[k]) && t[k] !== '【' && jaGroup(t, k)))) break;
+    const [y, j] = jphraseAt(t.slice(k), note);
+    if (!y || y.length < 2 || /^ー/.test(y) || (y.match(/ー/g) || []).length * 3 > y.length) break;   // 罫線が「ーーー」に読まれたものなどは除く
+    out.push(y); note('番号が読み取れなかった意味を、次の番号の意味として入れました。本と見比べてください'); x = y; i = k + j;
+  }
+  return out;
+}
+function jphraseAt(t, note) {
   note = note || (() => {});
   let i = 0, out = '';
   const ph = k => /[AB]/.test(t[k]) && !/[A-Za-z]/.test(t[k - 1] || '') && /^[（(ぁ-んァ-ヶ一-龠々]/.test(t[k + 1] || ''); // A（人）に などの A
@@ -743,7 +761,7 @@ function jphrase(t, note) {
     if ((/[\x21-\x7e]/.test(c) && !ph(i)) || /[①-⑳®↔←→《〈]/.test(c)) break;
     out += c; i++;
   }
-  return out.replace(/\s+/g, '').replace(/[、，,・]+$/, '');
+  return [out.replace(/\s+/g, '').replace(/[、，,・]+$/, ''), i];
 }
 // 丸数字（読み取りで®になったものも）ごとに日本語を取り出す。番号が①に戻ったら別の品詞の意味として分ける
 function senses(t, note) {
@@ -751,18 +769,19 @@ function senses(t, note) {
   const re = /[①-⑳®]|@(?=\s*[ぁ-んァ-ヶ一-龠々（(〔［\[])/g, marks = []; let m;
   while ((m = re.exec(t))) marks.push({i: m.index, n: /[®@]/.test(m[0]) ? 0 : m[0].charCodeAt(0) - 0x245F});
   const groups = [[]];
-  const lead = jphrase(t.slice(0, marks.length ? marks[0].i : t.length), note);
+  const leads = jparts(t.slice(0, marks.length ? marks[0].i : t.length), note);
   let prev = 0, odd = false;
-  if (lead) { groups[0].push(lead); prev = 1; if (marks.length && marks[0].n > 1) note('①の記号が読み取れませんでした。①の意味が欠けていないか確認してください'); }
+  if (leads.length) { groups[0].push(...leads); prev = leads.length; if (marks.length && marks[0].n > 1) note('①の記号が読み取れませんでした。①の意味が欠けていないか確認してください'); }
   marks.forEach((mk, k) => {
     let n = mk.n;
     if (k + 1 < marks.length && !t.slice(mk.i + 1, marks[k + 1].i).trim()) return;
     if (n === 1) { if (groups[groups.length - 1].length) groups.push([]); }
     else if (!n && !prev) n = 1;                              // 先頭の®（Ⓕなどの読み間違い）
     else if (n !== prev + 1) { n = prev + 1; odd = true; }    // ®や⑦など、並びに合わない番号は前の番号の次とみなす
-    const x = jphrase(t.slice(mk.i + 1, k + 1 < marks.length ? marks[k + 1].i : t.length), note);
-    if (x) groups[groups.length - 1].push(x); else note('番号の後の意味が読み取れなかったところがあります');
-    prev = n;
+    const xs = jparts(t.slice(mk.i + 1, k + 1 < marks.length ? marks[k + 1].i : t.length), note);
+    if (xs.length) groups[groups.length - 1].push(...xs); else note('番号の後の意味が読み取れなかったところがあります');
+    if (xs.length > 1) odd = true;
+    prev = n + Math.max(0, xs.length - 1);
   });
   if (odd) note('番号の読み取りが乱れていたので①②③…と振り直しました。抜けている意味がないか確認してください');
   return groups.filter(g => g.length).map(g => g.length === 1 ? g[0] : g.map((x, k) => CIRC[k] + x).join(''));
@@ -1184,7 +1203,7 @@ function joinWords(ws) { let t = '', sp = false; for (const w of ws) { t += (t &
 const DOTS = /^[:;|¦!.,'`´·・：\-_~"ilI1丨]+$/;   // 段の間の点線などの読み取り
 // 右の段の行の先頭の、チェック欄・品詞の四角・(1) などの読み取りを整える
 function cleanRow(t) {
-  t = t.replace(/(^|[^A-Za-z0-9])([A-Za-z]+)[06]([a-z]+)/g, '$1$2o$3');
+  t = t.replace(/(^|[^A-Za-z0-9])([A-Za-z]+)[06]([a-z]+)/g, '$1$2o$3').replace(/^｜/, '|').replace(/^([□口ロコ|]?\s*)1(?=[a-z\u00e0-\u024f]{3,})/, '$1l');
   return t.replace(/^[\[［|ロ口□▢☐◻▯■CDO0〇○コ]\s*[一ーｰ\-－—―━]+\s*/, '━').replace(/^(?:[O0〇○ロ□口▢☐◻▯■コ]|\[\s*\])\s+(?=[A-Za-z\u00c0-\u024f━ーｰ\-－—―一])/, '').replace(/^(?:[O0〇○ロ□口▢☐◻▯■]|\[\s*\])\s+/, '').replace(/^(?:[O0〇○ロ□口▢☐◻▯■コ]|\[\s*[\]J|1lI]?|[|L][\]J])\s*(?=[a-z\u00e0-\u024f])/, '').replace(/^[CD]\s+(?=[a-z\u00e0-\u024f]{3,})/, '').replace(/^[\[［|(（]([名動形副前接助感構頭尾代定])[\]］|)）]/, '$1').replace(/[(（]([1-9])[)）]/g, (m0, d) => CIRC[d - 1]);
 }
 // 左の段の行から、英文の中に見つかる見出し語を取り出す（前後の番号やチェック欄の読み取りは外す）
@@ -1193,6 +1212,7 @@ function hwFrom(text, en) {
   for (let a = 0; a < Math.min(3, tk.length); a++) for (let b = tk.length; b > a; b--) {
     if (/^[A-Z]$/.test(tk[a]) && b > a + 1) continue;
     const hw = cleanHw(tk.slice(a, b).join(' ').replace(/^(?:[^A-Za-z(…~]|\([^A-Za-z)]*\)?)+/, ''));
+    if (/^[A-Z]\s/.test(hw)) continue;
     if (/[A-Za-z]{2}/.test(hw) && toks(hw).some(o => !STOPW.has(o.t)) && locate(en, hw)) return hw;
   }
   return '';
@@ -1338,6 +1358,15 @@ function pageScan(data, W, H, ex) {
     if (r.unit >= units.length) continue;
     const top = r.unit < 0 ? -Infinity : units[r.unit].bot, bot = r.unit + 1 < units.length ? units[r.unit + 1].top : Infinity;
     const nc = noDots(chunks(r.lines.map(wordsOf).map(undot))).filter(c => c.x0 >= DIV - lh && c.y > top && c.y < bot);
+      for (const c of nc) {
+        const m = c.t.match(/^([^A-Za-z]{0,3})([A-Za-z][A-Za-z'’\-]{5,})/); if (!m) continue;
+        const key = m[2].toLowerCase();
+        for (const o of Rc) {
+          if (Math.abs(o.y - c.y) > lh * 0.6) continue;
+          const om = o.t.replace(/^[^A-Za-z]+/, '').match(/^[A-Za-z][A-Za-z'’\- ]*[A-Za-z]/);
+          if (om && om[0].includes(' ') && om[0].replace(/ /g, '').toLowerCase().startsWith(key)) { const sp = om[0].slice(0, om[0].length); let n = 0, e = 0; while (e < sp.length && n < key.length) { if (sp[e] !== ' ') n++; e++; } c.t = m[1] + sp.slice(0, e) + c.t.slice(m[0].length); break; }
+        }
+      }
     if (nc.length < 3) continue;
     Rc = Rc.filter(c => !(c.y > top && c.y < bot)).concat(nc); RJ.push(...nc);
   }
@@ -1378,7 +1407,7 @@ function pageScan(data, W, H, ex) {
   // 囲みの左の辺は意味の段の書き出しにそろっている（裏写りの枠などは外れる）
   const boxes = ((ex.marks || {}).boxes || []).filter(b => b.x0 >= DIV - lh * 1.5 && (!TX || Math.abs(b.x0 - TX) < lh * 1.8) && b.x1 - b.x0 >= (EDGE - DIV) * 0.5);
   for (const b of boxes) {
-    const inB = Rrows.filter(r => inBox(b, r.x0 + lh, r.ry));
+    const inB = Rrows.filter(r => inBox(b, r.x0 + lh, r.ry) && !r.pf && !r.pm && !relLine(cleanRow(r.t)) && !/^[\s□口ロコ|｜・•]*[a-zÀ-ɏ][a-zÀ-ɏ'’\-]{2,}/.test(r.t));
     if (inB.some(r => JPRE.test(r.t))) { inB.forEach(r => { r.tr = 1; }); b.ok = 1; }
   }
   // 英語専用で読み直した結果：例文は読み直した方を使い、左の段は読み直した方を先に探す
@@ -1485,7 +1514,7 @@ function buildPhoto(pages, lt) {
     if (te < 0 && rR.length) { const z = trim(rR[rR.length - 1].t); if ((z.match(/[ぁ-んァ-ヶ一-龠々]/g) || []).length >= 6 && /[、，,.・]$/.test(z) && !posOf(z) && !/[（）()［］\[\]【】①-⑳]/.test(z)) { te = rR.length - 1; noteS('和訳の終わりの「。」が読み取れなかったので、最後の行を和訳としました。本と見比べてください'); } }
     if (te >= 0) {
       if (!trI.length) { ts = te; while (ts > 0 && te - ts < 2 && plainJa(trim(rR[ts - 1].t)) && rR[ts].y - rR[ts - 1].y < lh * 2.2) ts--; }
-      ja = rR.slice(ts, te + 1).map(r => trim(r.t)).join('').replace(/([^\x00-\x7f])\s+(?=[^\x00-\x7f])/g, '$1').replace(/(。[」』]?)[^。]*$/, '$1').trim();
+      ja = rR.slice(ts, te + 1).map(r => trim(r.t)).join('').replace(/([^\x00-\x7f])\s+(?=[^\x00-\x7f])/g, '$1').replace(/([ぁ-んァ-ヶ一-龠々])[.．](?![0-9A-Za-z])(?=[^。]*$)/, '$1。').replace(/(。[」』]?)[^。]*$/, '$1').trim();   // 最後の「。」が「.」に読まれたもの
     } else if (blk) { te = ts = rR.length; }
     else { skipped.push(label); return; }
     const jaRows = rR.slice(ts, te + 1);
@@ -1729,7 +1758,7 @@ async function ocrPages(files) {
             const w = {text: f.pos, confidence: 95, sp: 1, bbox: {x0: f.x0, y0: f.y0, x1: f.x1, y1: f.y1}};
             let best = null, bo = 0;
             for (const l of ls) { if (!l.words.length) continue; const y0 = Math.min(...l.words.map(v => v.bbox.y0)), y1 = Math.max(...l.words.map(v => v.bbox.y1)), o = Math.min(y1, f.y1) - Math.max(y0, f.y0); if (o > bo) { bo = o; best = l; } }
-            if (best && bo > (f.y1 - f.y0) * 0.4) best.words.push(w); else ls.push({words: [w]});
+            if (best && bo > (f.y1 - f.y0) * 0.4) { best.words = best.words.filter(v => { const cx = (v.bbox.x0 + v.bbox.x1) / 2, cy = (v.bbox.y0 + v.bbox.y1) / 2; return !(cx > f.x0 && cx < f.x1 && cy > f.y0 && cy < f.y1); }); best.words.push(w); } else ls.push({words: [w]});
           }
           p.rj.push({unit: rc.unit, lines: ls});
         }
@@ -1918,6 +1947,7 @@ function onClick(e) {
     case 'togS': togS(d.id); break;
     case 'mvW': mvW(d.id, +d.d); break;
     case 'mvS': mvS(d.id, +d.d); break;
+    case 'rawcp': { const ta = document.querySelector('.raw textarea'); const done = () => { b.textContent = 'コピーしました'; }; if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(RAW).then(done, () => { ta.select(); document.execCommand('copy'); done(); }); else { ta.select(); document.execCommand('copy'); done(); } break; }
     case 'ddel': ddel(); break;
     case 'exp': exportData(); break;
   }
