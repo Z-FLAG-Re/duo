@@ -937,7 +937,7 @@ function photoParse(data, W) {
     .map(w => ({t: String(w.text).trim(), x0: w.bbox.x0, y0: w.bbox.y0, x1: w.bbox.x1, y1: w.bbox.y1, cf: w.confidence == null ? 100 : +w.confidence}))
     .sort((a, b) => a.x0 - b.x0));
   const all = LN.flat();
-  if (!all.length) return {out, skipped, raw: ''};
+  if (!all.length) return {out, skipped, raw: '文字が1つも読み取れませんでした'};
   const lh = Math.max(8, med(all.map(w => w.y1 - w.y0)));
   // 点線などの読み取り：細い記号だけの語で、前後の文字から離れているもの
   for (let i = 0; i < LN.length; i++) LN[i] = LN[i].filter((w, k, a) => !(DOTS.test(w.t) && w.x1 - w.x0 < lh * 0.6 && (!a[k - 1] || w.x0 - a[k - 1].x1 > lh * 0.5) && (!a[k + 1] || a[k + 1].x0 - w.x1 > lh * 0.5)));
@@ -951,7 +951,10 @@ function photoParse(data, W) {
   const CH = [];
   for (const ws of LN) { if (!ws.length) continue; let cur = [ws[0]]; for (let i = 1; i < ws.length; i++) { if (ws[i].x0 - ws[i - 1].x1 > lh * 1.2) { CH.push(mk(cur)); cur = []; } cur.push(ws[i]); } CH.push(mk(cur)); }
   // 左の段（見出し語）と右の段（意味）の境目：塊の左端の位置を2つの集まりに分ける
-  const wideEn = c => !JPRE.test(c.t) && c.x1 - c.x0 > W * 0.4;
+  const jaN = t => (t.match(/[ぁ-んァ-ヶ一-龠々]/g) || []).length;
+  const enLike = t => jaN(t) <= 2 && (t.match(/[A-Za-z]/g) || []).length >= 10;
+  const wideEn = c => enLike(c.t) && c.x1 - c.x0 > W * 0.35;
+  const enText = t => t.replace(/[ぁ-んァ-ヶ一-龠々]/g, '').replace(/^[^A-Za-z"“‘'(]+/, '').replace(/。$/, '.').replace(/\s+/g, ' ').trim();
   const xs = CH.filter(c => !wideEn(c) && c.x0 < W * 0.75).map(c => c.x0);
   let DIV = W * 0.3;
   if (xs.length >= 2) {
@@ -961,17 +964,17 @@ function photoParse(data, W) {
     if (cR - cL > W * 0.12 && Rx.length) DIV = Rx[Math.floor(Rx.length * 0.1)] - lh * 0.4;
   }
   // 例文：左の段から始まる、幅の広い英語だけの行（続きの行もつなぐ）
-  const SENT = CH.filter(c => wideEn(c) && c.x0 < DIV && nWords(c.t) >= 3 && /^["“‘'(]?[A-Z]/.test(c.t)).sort((a, b) => a.y - b.y);
+  const SENT = CH.filter(c => wideEn(c) && c.x0 < DIV && nWords(c.t) >= 3 && /^["“‘'(]?[A-Z]/.test(enText(c.t))).sort((a, b) => a.y - b.y);
   const used = new Set(SENT), units = [];
   for (const c of SENT) {
     const u = units[units.length - 1];
-    if (u && c.y - u.lastY < lh * 2 && Math.abs(c.x0 - u.x0) < lh * 1.5) { u.en += ' ' + c.t; u.lastY = c.y; u.bot = c.y1; u.cf.push(c.cf); continue; }
-    units.push({en: c.t, x0: c.x0, top: c.y0, lastY: c.y, bot: c.y1, cf: [c.cf]});
+    if (u && c.y - u.lastY < lh * 2 && Math.abs(c.x0 - u.x0) < lh * 1.5) { u.en += ' ' + enText(c.t); u.lastY = c.y; u.bot = c.y1; u.cf.push(c.cf); continue; }
+    units.push({en: enText(c.t), x0: c.x0, top: c.y0, lastY: c.y, bot: c.y1, cf: [c.cf]});
   }
   for (const u of units) for (let g = 0; g < 3 && !/[.?!"”’]$/.test(u.en); g++) {
-    const nx = CH.filter(c => !used.has(c) && c.y > u.lastY && c.y - u.lastY < lh * 2.4 && Math.abs(c.x0 - u.x0) < lh * 1.5 && !JPRE.test(c.t) && /[A-Za-z]/.test(c.t)).sort((a, b) => a.y - b.y)[0];
+    const nx = CH.filter(c => !used.has(c) && c.y > u.lastY && c.y - u.lastY < lh * 2.4 && Math.abs(c.x0 - u.x0) < lh * 1.5 && jaN(c.t) <= 1 && /[A-Za-z]/.test(c.t)).sort((a, b) => a.y - b.y)[0];
     if (!nx) break;
-    used.add(nx); u.en += ' ' + nx.t; u.lastY = nx.y; u.bot = nx.y1; u.cf.push(nx.cf);
+    used.add(nx); u.en += ' ' + enText(nx.t); u.lastY = nx.y; u.bot = nx.y1; u.cf.push(nx.cf);
   }
   // 残りを左右の段に分ける（つながって読まれた行は境目で切る）
   const Lc = [], Rc = [];
@@ -998,12 +1001,11 @@ function photoParse(data, W) {
     const bot = k + 1 < units.length ? units[k + 1].top : Infinity, label = u.en.slice(0, 16);
     const rR = Rrows.filter(r => r.y > u.bot && r.y < bot).map(r => Object.assign({}, r, {t: cleanRow(r.t)}));
     const rL = Lrows.filter(r => r.y > u.bot && r.y < bot);
-    raw.push('英文：' + u.en, ...rL.map(r => '[左] ' + r.t), ...rR.map(r => '[右] ' + r.t), '');
     // 和訳：右の段の最後の「。」で終わる行（前の行に続いていればつなぐ）
-    let te = -1; for (let i = rR.length - 1; i >= 0; i--) if (JPRE.test(rR[i].t) && /。[」』]?$/.test(trim(rR[i].t))) { te = i; break; }
+    let te = -1; for (let i = rR.length - 1; i >= 0; i--) if (JPRE.test(rR[i].t) && /。[」』]?[^ぁ-んァ-ヶ一-龠々。]{0,3}$/.test(trim(rR[i].t))) { te = i; break; }
     if (te < 0) { skipped.push(label); return; }
     let ts = te; while (ts > 0 && te - ts < 2 && plainJa(trim(rR[ts - 1].t)) && rR[ts].y - rR[ts - 1].y < lh * 2.2) ts--;
-    const ja = rR.slice(ts, te + 1).map(r => trim(r.t)).join('').replace(/([^\x00-\x7f])\s+(?=[^\x00-\x7f])/g, '$1').trim();
+    const ja = rR.slice(ts, te + 1).map(r => trim(r.t)).join('').replace(/([^\x00-\x7f])\s+(?=[^\x00-\x7f])/g, '$1').replace(/(。[」』]?)[^。]*$/, '$1').trim();
     // 見出し語：左の段で、英文の中に見つかる語（2行に分かれたものはつなぐ）
     const words = [], seen = new Set();
     for (let i = 0; i < rL.length; i++) {
@@ -1052,6 +1054,9 @@ function photoParse(data, W) {
       return {hw: w.hw, ja: M.ja, p: M.p, chk: M.chk};
     })});
   });
+  const tag = c => used.has(c) ? '文' : c.x0 >= DIV ? '右' : '左';
+  raw.push(`幅${W} 境目${Math.round(DIV)} 行の高さ${Math.round(lh)} 傾き${slope.toFixed(3)} 例文${units.length}件 和訳と単語がそろったもの${out.length}件`);
+  for (const c of CH.slice().sort((a, b) => a.y - b.y)) raw.push(`${tag(c)} ${Math.round(c.x0)},${Math.round(c.y)} ${c.t}`);
   return {out, skipped, raw: raw.join('\n')};
 }
 async function photoImport(files) {
@@ -1075,7 +1080,7 @@ async function photoImport(files) {
       const cv = prepImg(await loadImg(files[i]));
       const r = await worker.recognize(cv, {}, {blocks: true, text: true});
       const res = photoParse((r && r.data) || {}, cv.width);
-      all.push(...res.out); skipped.push(...res.skipped); raws.push(res.raw);
+      all.push(...res.out); skipped.push(...res.skipped); raws.push(`【${i + 1}枚目】\n` + res.raw);
     }
   } catch (e) {
     OCRBUSY = false; prog(false);
