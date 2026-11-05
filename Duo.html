@@ -163,6 +163,7 @@ label.btn{position:relative;display:flex;align-items:center;justify-content:cent
 /* ===== 保存（この端末のブラウザ内だけ） ===== */
 const K = {d: 'duoApp:data', p: 'duoApp:prog', u: 'duoApp:ui'};
 const NSEC = 45;
+const APP_VER = '2026-11-05 22:00';   // 更新するたびに変える
 function load(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } }
 function store(k, v) {
   try { localStorage.setItem(k, JSON.stringify(v)); return true; }
@@ -508,6 +509,7 @@ ${S.map(s => senBox(s, N)).join('') || '<p class="note">「英文を追加」で
 <div class="panel pad"><h3 class="hd">入力済みのセクション</h3><div class="grid">${g}</div></div>
 <div class="panel pad"><h3 class="hd">バックアップ</h3>
 <div class="btns"><button data-act="exp">書き出し</button><label class="btn">読み込み<input type="file" id="impf" class="vh" accept=".json,application/json,text/plain"></label></div>
+<p class="note">アプリの版：${APP_VER}</p>
 <p class="note">入力は自動で保存されます。データと習熟度はこの端末の中にだけあるので、ときどき書き出して「ファイル」に保存してください。</p></div>
 <div class="panel pad"><button class="wide warn" data-act="ddel"${S.length ? '' : ' disabled'}>Section ${DSEC} のデータをすべて削除</button></div>`;
   app.querySelectorAll('textarea').forEach(grow);
@@ -740,7 +742,6 @@ function buildWord(j, L, A, st) {
     const g = senses(t, note);
     if (!g.length) { if (it.k === 'o') note('別の品詞の意味が読み取れませんでした'); return; }
     if (idx === 0 && it.k === 'm') { if (pp) pos = pp; main = true; parts.push(...g); } // 最初の品詞は品詞の欄に入れる
-    else if (it.dash && lastD) parts.push(lastD + (pp ? '（' + pp + '）' : ' ') + g.join('　'));   // 「━」が直前の関連語を指す時
     else parts.push((pp ? '（' + pp + '）' : '') + g.join('　'));
   });
   if (!main) note('見出し語の意味が読み取れませんでした');
@@ -820,7 +821,7 @@ function ocrParse(text) {
     for (let k = 0; k < body.length; k++) {
       const x = body[k];
       if (PRON.test(x)) continue;
-      const c0 = x.replace(/^\d+\s*/, '');
+      const c0 = cleanRow(x.replace(/^\d+\s*/, ''));
       if (HWRE.test(c0) && /[A-Za-z]/.test(c0)) {
         let hw = cleanHw(c0), merged = false;
         const nx = (body[k + 1] || '').replace(/^\d+\s*/, '');
@@ -837,7 +838,7 @@ function ocrParse(text) {
         }
       }
       if ((x.length >= 4 && S.includes(x)) || (x.length >= 8 && S.some(y => y.includes(x)))) continue; // 重ねてコピーした行
-      S.push(x);
+      S.push(cleanRow(x));
     }
     const M = sortMeanings(words, S);
     out.push({en, ja, chk: chkS, words: words.map((w, k) => ({hw: w.hw, ja: M[k].ja, p: M[k].p, chk: M[k].chk}))});
@@ -962,7 +963,7 @@ function joinWords(ws) { let t = ''; for (const w of ws) t += (t && /[A-Za-z0-9.
 const DOTS = /^[:;|¦!.,'`´·・：\-_~"ilI1丨]+$/;   // 段の間の点線などの読み取り
 // 右の段の行の先頭の、チェック欄・品詞の四角・(1) などの読み取りを整える
 function cleanRow(t) {
-  return t.replace(/^[\[［|]\s*[一ーｰ\-－—―━]+\s*/, '━').replace(/^(?:[O0〇○ロ□口]|\[\s*\])\s+/, '').replace(/^(?:[O0〇○ロ□口]|\[\s*[\]J|1lI]?|[|L][\]J])\s*(?=[a-z\u00e0-\u024f])/, '').replace(/^[\[［|(（]([名動形副前接助感構頭尾代定])[\]］|)）]/, '$1').replace(/[(（]([1-9])[)）]/g, (m0, d) => CIRC[d - 1]);
+  return t.replace(/^[\[［|ロ口□▢☐◻▯■CDO0〇○]\s*[一ーｰ\-－—―━]+\s*/, '━').replace(/^(?:[O0〇○ロ□口▢☐◻▯■]|\[\s*\])\s+/, '').replace(/^(?:[O0〇○ロ□口▢☐◻▯■]|\[\s*[\]J|1lI]?|[|L][\]J])\s*(?=[a-z\u00e0-\u024f])/, '').replace(/^[CD]\s+(?=[a-z\u00e0-\u024f]{3,})/, '').replace(/^[\[［|(（]([名動形副前接助感構頭尾代定])[\]］|)）]/, '$1').replace(/[(（]([1-9])[)）]/g, (m0, d) => CIRC[d - 1]);
 }
 // 左の段の行から、英文の中に見つかる見出し語を取り出す（前後の番号やチェック欄の読み取りは外す）
 function hwFrom(text, en) {
@@ -1161,7 +1162,7 @@ function buildPhoto(pages, lt) {
   };
   const trim = trimEdge;
   // テキスト認識でコピーした文章（あれば）：例文ごとに区切り、写真の例文と一致したところの文字を使う（どの語の行かは写真の位置で決める）
-  const LT = lt ? ltBlocks(lt) : null;
+  const LT = lt ? ltBlocks(lt) : null, asgDbg = [];
   let ltCand = 0, ltHit = 0;
   units.forEach((u, k) => {
     let blk = null;
@@ -1284,6 +1285,7 @@ function buildPhoto(pages, lt) {
     if (!u.jaLT && jaRows.some(r => r.cf < 60)) noteS('和訳の読み取りの確度が低いので、本と見比べてください');
     out.push({en, ja, chk: chkS, words: words.map((w, j) => {
       const rs = wl[j] || [], L = rs.map(r => r.t);
+      asgDbg.push(`［${w.hw}］ ` + (L.join(' ／ ') || '（行なし）'));
       const A = L.map((t, i) => i > 0 && cont(L[i - 1], t, st) ? -1 : anchorOf(t, st));
       const M = w.empty ? {ja: '', p: '', chk: [w.empty]} : buildWord(j, L, A, st);
       if (rs.some(r => r.cf != null && r.cf < 60)) M.chk.push('読み取りの確度が低い行があります。本と見比べてください');
@@ -1295,6 +1297,7 @@ function buildPhoto(pages, lt) {
   const ltInfo = LT ? ` 文章の行${ltCand}行中${ltHit}行を写真の行に対応づけました` : '';
   raw.push(`例文${units.length}件 和訳と単語がそろったもの${out.length}件${ltInfo}`);
   out.forEach((x, k) => raw.push(`英文${k + 1}：${x.en}`));
+  raw.push(...asgDbg);
   pages.forEach((P, i) => { if (pages.length > 1) raw.push(`［${i + 1}枚目］`); raw.push(...P.dbg); });
   return {out, skipped, raw: raw.join('\n')};
 }
@@ -1314,7 +1317,7 @@ const JAEND = /。[」』]?[^ぁ-んァ-ヶ一-龠々。]{0,3}$/;
 function trimEdge(x) { return x.replace(/^[\s|｜\[\]［］_\-—–=~:;'"`]+|[\s|｜\[\]［］_\-—–=~:;'"`]+$/g, ''); }
 // テキスト認識でコピーした文章を、例文ごとに区切る（例文の行から、次の例文の行の前まで）
 function ltBlocks(text) {
-  const L = String(text).replace(/\r\n?/g, '\n').split('\n').map(x => x.replace(/^[\s　|•・]+|[\s　]+$/g, '')).filter(x => x && !NUMLN.test(x));
+  const L = String(text).replace(/\r\n?/g, '\n').split('\n').map(x => cleanRow(x.replace(/^[\s　|•・]+|[\s　]+$/g, ''))).filter(x => x && !NUMLN.test(x));
   const blocks = []; let cur = null;
   for (let k = 0; k < L.length; k++) {
     if ((!cur || cur.hasJa) && isSentStart(L, k)) { cur = {L: [], hasJa: false}; blocks.push(cur); }
@@ -1391,7 +1394,7 @@ async function photoImport(files) {
     all.push(...res.out); skipped.push(...res.skipped); raws.push(res.raw);
   } catch (e) { alert(ocrErr(e)); return; }
   finally { OCRBUSY = false; prog(false); }
-  RAW = raws.join('\n');
+  RAW = `版 ${APP_VER}\n` + raws.join('\n');
   if (!all.length) { if (VIEW === 'data') keepScroll(vData); alert('写真から英文と和訳を見つけられませんでした。ページを平らにして真上から撮った写真で試してください。\n読み取れた文字は「写真から読み取った文字（確認用）」で見られます。'); return; }
   importBlocks(all, skipped, sec);
 }
@@ -1406,7 +1409,7 @@ async function hybridImport() {
   try { const ps = await ocrPages(files); res = buildPhoto(ps.map(p => pageScan(p.d1, p.W, p.H, {eng: p.eng, rj: p.rj})), text); }
   catch (e) { alert(ocrErr(e)); return; }
   finally { OCRBUSY = false; prog(false); }
-  RAW = '【写真と文章】\n' + res.raw;
+  RAW = `【写真と文章】版 ${APP_VER}\n` + res.raw;
   BPH = null;
   if (res.out.length) { importBlocks(res.out, res.skipped, sec); return; }
   // 写真から例文の位置が分からなかった時は、文章だけで取り込む
