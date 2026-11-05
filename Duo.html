@@ -503,7 +503,7 @@ function vData() {
 ${RAW ? `<details class="raw"><summary class="small sub">写真から読み取った文字（うまく取り込めない時の確認用）</summary><textarea readonly rows="8">${esc(RAW)}</textarea></details>` : ''}
 <div class="cks" id="cks" hidden></div>
 <div id="bulk" hidden><textarea id="btxt" rows="6" placeholder="写真のテキスト認識でコピーした文章を、そのまま貼り付けます" ${NOAUTO}></textarea>
-<div class="bph"><label class="btn add">写真も使う<input type="file" id="bphf" class="vh" accept="image/*"></label><span class="small sub" id="bphn"></span><button class="lnk" id="bphx" data-act="bphx" hidden>外す</button></div><div class="btns"><button data-act="bclose">閉じる</button><button class="pri" data-act="bimp">取り込む</button></div></div>
+<div class="bph"><label class="btn add">写真も使う<input type="file" id="bphf" class="vh" accept="image/*" multiple></label><span class="small sub" id="bphn"></span><button class="lnk" id="bphx" data-act="bphx" hidden>外す</button></div><div class="btns"><button data-act="bclose">閉じる</button><button class="pri" data-act="bimp">取り込む</button></div></div>
 ${S.map(s => senBox(s, N)).join('') || '<p class="note">「英文を追加」で、このSectionの最初の英文を入れてください。</p>'}</div>
 <div class="panel pad"><h3 class="hd">入力済みのセクション</h3><div class="grid">${g}</div></div>
 <div class="panel pad"><h3 class="hd">バックアップ</h3>
@@ -981,15 +981,16 @@ function inc(A, B) { return bcommon(A, B) / A.n; }
 // 文字認識の結果（文字と位置）から、英文・和訳・見出し語・意味を取り出す。
 // ex.eng：例文と左の段を英語専用で読み直した結果、ex.rj：右の段を読み直した結果、ex.lt：テキスト認識でコピーした文章（あれば文字はこちらを使う）。
 // rects は読み直す範囲
-function photoParse(data, W, H, ex) {
+// 1枚の写真の読み取り結果から、段の配置（例文、左右の段の行）を調べる。rects は読み直す範囲
+function pageScan(data, W, H, ex) {
   ex = ex || {};
-  const out = [], skipped = [], raw = [], rects = [];
+  const rects = [];
   const med = a => { const b = a.slice().sort((x, y) => x - y); return b.length ? b[b.length >> 1] : 0; };
   const wordsOf = l => (l.words && l.words.length ? l.words : [l]).filter(w => w && w.bbox && String(w.text || '').trim())
     .map(w => ({t: String(w.text).trim(), x0: w.bbox.x0, y0: w.bbox.y0, x1: w.bbox.x1, y1: w.bbox.y1, cf: w.confidence == null ? 100 : +w.confidence}))
     .sort((a, b) => a.x0 - b.x0);
   const LN = ocrLines(data).map(wordsOf), all = LN.flat();
-  if (!all.length) return {out, skipped, rects, raw: '文字が1つも読み取れませんでした'};
+  if (!all.length) return {lh: 0, W, H, DIV: 0, units: [], Rrows: [], Lrows: [], LrowsE: [], rects, dbg: ['文字が1つも読み取れませんでした'], hasLead: false, lastOpen: false};
   H = H || Math.max(...all.map(w => w.y1));
   const lh = Math.max(8, med(all.map(w => w.y1 - w.y0)));
   // 点線などの読み取り：細い記号だけの語で、前後の文字から離れているもの
@@ -1016,7 +1017,12 @@ function photoParse(data, W, H, ex) {
     let cL = Math.min(...xs), cR = Math.max(...xs);
     for (let it = 0; it < 12; it++) { let sa = 0, na = 0, sb = 0, nb = 0; for (const x of xs) { if (Math.abs(x - cL) <= Math.abs(x - cR)) { sa += x; na++; } else { sb += x; nb++; } } if (na) cL = sa / na; if (nb) cR = sb / nb; }
     const Rx = xs.filter(x => Math.abs(x - cR) < Math.abs(x - cL)).sort((a, b) => a - b);
-    if (cR - cL > W * 0.12 && Rx.length) DIV = Rx[Math.floor(Rx.length * 0.1)] - lh * 0.4;
+    if (cR - cL > W * 0.12 && Rx.length) {
+      DIV = Rx[Math.floor(Rx.length * 0.1)] - lh * 0.4;
+      // 品詞の四角は意味の段の左に出ているので、境目はいちばん左の品詞の四角より左にする
+      const px = CH.filter(c => c.x0 >= (cL + cR) / 2 && /^[\[［|(（]?[名動形副前接助感構頭尾代定]/.test(c.t)).map(c => c.x0);
+      if (px.length) DIV = Math.min(DIV, Math.min(...px) - lh * 0.3);
+    }
   }
   // 段の境目の点線の読み取り（ii、: など）を除く
   const noDots = cs => cs.filter(c => !(c.x1 - c.x0 < lh * 1.2 && Math.abs(c.x0 - DIV) < lh * 2.5 && /^[ilI1|!¦:;.,'`´・：\-_~"丨]+$/.test(c.t)));
@@ -1054,11 +1060,14 @@ function photoParse(data, W, H, ex) {
     addRect('left', k, 0, y0, DIV - lh * 0.3, y1 - y0);
     addRect('right', k, DIV - lh * 0.6, y0, Math.min(W, EDGE + lh) - (DIV - lh * 0.6), y1 - y0);
   });
+  // 最初の例文より上（前のページからの続き）。続けて撮った2枚目の時に使う
+  const lead = units.length ? units[0].ry0 - lh * 0.2 : H;
+  if (lead > lh * 3) { addRect('left', -1, 0, 0, DIV - lh * 0.3, lead); addRect('right', -1, DIV - lh * 0.6, 0, Math.min(W, EDGE + lh) - (DIV - lh * 0.6), lead); }
   // 右の段を読み直した結果があれば、その範囲の右の段を置き換える（うまく読めなかった時は1回目のまま）
   const RJ = [];
   for (const r of ex.rj || []) {
-    const u = units[r.unit]; if (!u) continue;
-    const top = u.bot, bot = r.unit + 1 < units.length ? units[r.unit + 1].top : Infinity;
+    if (r.unit >= units.length) continue;
+    const top = r.unit < 0 ? -Infinity : units[r.unit].bot, bot = r.unit + 1 < units.length ? units[r.unit + 1].top : Infinity;
     const nc = noDots(chunks(r.lines.map(wordsOf).map(undot))).filter(c => c.x0 >= DIV - lh && c.y > top && c.y < bot);
     if (nc.length < 3) continue;
     Rc = Rc.filter(c => !(c.y > top && c.y < bot)).concat(nc); RJ.push(...nc);
@@ -1098,6 +1107,46 @@ function photoParse(data, W, H, ex) {
     const t = parts.join(' ').replace(/\s+/g, ' ').trim();
     return nWords(t) >= 3 && enN(t) >= 10 ? {t, cf} : null;
   };
+  units.forEach((u, k) => { const re = engSent(k); if (re) { u.en = re.t; u.cf = re.cf.length ? re.cf : u.cf; } });
+  const tag = c => used.has(c) ? '文' : c.x0 >= DIV ? '右' : '左', dbg = [`幅${W} 境目${Math.round(DIV)} 行の高さ${Math.round(lh)} 傾き${slope.toFixed(3)} 例文${units.length}件`];
+  units.forEach((u, k) => dbg.push(`英文${k + 1}：${u.en}`));
+  for (const c of CH.slice().sort((a, b) => a.y - b.y)) dbg.push(`${tag(c)} ${Math.round(c.x0)},${Math.round(c.y)} ${c.t}`);
+  for (const c of LcE.slice().sort((a, b) => a.y - b.y)) dbg.push(`左E ${Math.round(c.x0)},${Math.round(c.y)} ${c.t}`);
+  for (const c of RJ.slice().sort((a, b) => a.y - b.y)) dbg.push(`右J ${Math.round(c.x0)},${Math.round(c.y)} ${c.t}`);
+  // 2枚の順番を決める手がかり：最初の例文より上に意味の行があるか、最後の例文の和訳が写っていないか
+  const last = units[units.length - 1];
+  const hasLead = Rrows.some(r => !units.length || r.y < units[0].top);
+  const lastOpen = !!last && !Rrows.some(r => r.y > last.bot && JPRE.test(r.t) && JAEND.test(trimEdge(r.t)));
+  return {W, H, lh, DIV, units, Rrows, Lrows, LrowsE, rects, dbg, hasLead, lastOpen};
+}
+// 1枚、または続けて撮った2枚の写真（pageScan の結果、ページの順）から、英文・和訳・見出し語・意味を取り出す。
+// lt：テキスト認識でコピーした文章（あれば文字はこちらを使い、どの語の行かは写真の位置で決める）
+function buildPhoto(pages, lt) {
+  const out = [], skipped = [], raw = [];
+  const med = a => { const b = a.slice().sort((x, y) => x - y); return b.length ? b[b.length >> 1] : 0; };
+  const jaN = t => (t.match(/[ぁ-んァ-ヶ一-龠々]/g) || []).length;
+  const ok = pages.filter(P => P.lh);
+  if (!ok.length) { pages.forEach(P => raw.push(...P.dbg)); return {out, skipped, raw: raw.join('\n')}; }
+  // 2枚目は、前の写真の続きになるように、行の高さと段の境目をそろえて下につなぐ
+  const P0 = ok[0], lh = P0.lh;
+  let units = P0.units.map(u => Object.assign({}, u)), Rrows = P0.Rrows.slice(), Lrows = P0.Lrows.slice(), LrowsE = P0.LrowsE.slice();
+  for (let q = 1; q < ok.length; q++) {
+    const P = ok[q], s = lh / P.lh, pAll = [...P.Rrows, ...P.Lrows, ...P.LrowsE];
+    const top = Math.min(Infinity, ...pAll.map(r => r.y0), ...P.units.map(u => u.top));
+    if (!isFinite(top)) continue;
+    const base = Math.max(0, ...Rrows.map(r => r.y1), ...Lrows.map(r => r.y1), ...LrowsE.map(r => r.y1), ...units.map(u => u.bot)) + lh * 3;
+    const ty = y => (y - top) * s + base, tx = x => (x - P.DIV) * s + P0.DIV;
+    const mr = r => Object.assign({}, r, {y: ty(r.y), y0: ty(r.y0), y1: ty(r.y1), x0: tx(r.x0)});
+    const pU = P.units.map(u => Object.assign({}, u, {top: ty(u.top), bot: ty(u.bot), lastY: ty(u.lastY)}));
+    let pR = P.Rrows.map(mr), pL = P.Lrows.map(mr), pLE = P.LrowsE.map(mr);
+    // 前の写真の最後の例文が和訳まで写っていれば、この写真の最初の例文より上の行は続きではないので使わない
+    const last = units[units.length - 1];
+    if (!last || Rrows.some(r => r.y > last.bot && JPRE.test(r.t) && JAEND.test(trimEdge(r.t)))) {
+      const ft = pU.length ? pU[0].top : Infinity;
+      pR = pR.filter(r => r.y > ft); pL = pL.filter(r => r.y > ft); pLE = pLE.filter(r => r.y > ft);
+    }
+    units = units.concat(pU); Rrows = Rrows.concat(pR); Lrows = Lrows.concat(pL); LrowsE = LrowsE.concat(pLE);
+  }
   const findHw = (rL, en, maxY) => {
     const ws = [], seen = new Set();
     for (let i = 0; i < rL.length; i++) {
@@ -1110,12 +1159,11 @@ function photoParse(data, W, H, ex) {
     }
     return ws;
   };
-  const trim = x => x.replace(/^[\s|｜\[\]［］_\-—–=~:;'"`]+|[\s|｜\[\]［］_\-—–=~:;'"`]+$/g, '');
+  const trim = trimEdge;
   // テキスト認識でコピーした文章（あれば）：例文ごとに区切り、写真の例文と一致したところの文字を使う（どの語の行かは写真の位置で決める）
-  const LT = ex.lt ? ltBlocks(ex.lt) : null;
+  const LT = lt ? ltBlocks(lt) : null;
   let ltCand = 0, ltHit = 0;
   units.forEach((u, k) => {
-    const re = engSent(k); if (re) { u.en = re.t; u.cf = re.cf.length ? re.cf : u.cf; }
     let blk = null;
     if (LT) { let bs = 0; for (const b of LT) { if (b.used) continue; const v = ovl(bigr(b.en), bigr(u.en)); if (v > bs) { bs = v; blk = b; } } if (blk && bs >= 0.45) blk.used = true; else blk = null; }
     if (blk) u.en = blk.en;
@@ -1245,14 +1293,25 @@ function photoParse(data, W, H, ex) {
     })});
   });
   const ltInfo = LT ? ` 文章の行${ltCand}行中${ltHit}行を写真の行に対応づけました` : '';
-  const tag = c => used.has(c) ? '文' : c.x0 >= DIV ? '右' : '左';
-  raw.push(`幅${W} 境目${Math.round(DIV)} 行の高さ${Math.round(lh)} 傾き${slope.toFixed(3)} 例文${units.length}件 和訳と単語がそろったもの${out.length}件${ltInfo}`);
+  raw.push(`例文${units.length}件 和訳と単語がそろったもの${out.length}件${ltInfo}`);
   out.forEach((x, k) => raw.push(`英文${k + 1}：${x.en}`));
-  for (const c of CH.slice().sort((a, b) => a.y - b.y)) raw.push(`${tag(c)} ${Math.round(c.x0)},${Math.round(c.y)} ${c.t}`);
-  for (const c of LcE.slice().sort((a, b) => a.y - b.y)) raw.push(`左E ${Math.round(c.x0)},${Math.round(c.y)} ${c.t}`);
-  for (const c of RJ.slice().sort((a, b) => a.y - b.y)) raw.push(`右J ${Math.round(c.x0)},${Math.round(c.y)} ${c.t}`);
-  return {out, skipped, rects, raw: raw.join('\n')};
+  pages.forEach((P, i) => { if (pages.length > 1) raw.push(`［${i + 1}枚目］`); raw.push(...P.dbg); });
+  return {out, skipped, raw: raw.join('\n')};
 }
+// 1枚の写真だけで取り出す
+function photoParse(data, W, H, ex) {
+  ex = ex || {};
+  const P = pageScan(data, W, H, ex), r = buildPhoto([P], ex.lt);
+  return {out: r.out, skipped: r.skipped, rects: P.rects, raw: r.raw};
+}
+// 2枚の写真の順番：前の写真の最後の例文に和訳が無く、次の写真が例文の途中から始まる順を選ぶ（決め手が無ければ選んだ順）
+function pageOrder(scans) {
+  if (scans.length !== 2) return scans.map((x, i) => i);
+  const fit = (P, Q) => (P.lastOpen ? 1 : 0) + (Q.hasLead ? 1 : 0);
+  return fit(scans[1], scans[0]) > fit(scans[0], scans[1]) ? [1, 0] : [0, 1];
+}
+const JAEND = /。[」』]?[^ぁ-んァ-ヶ一-龠々。]{0,3}$/;
+function trimEdge(x) { return x.replace(/^[\s|｜\[\]［］_\-—–=~:;'"`]+|[\s|｜\[\]［］_\-—–=~:;'"`]+$/g, ''); }
 // テキスト認識でコピーした文章を、例文ごとに区切る（例文の行から、次の例文の行の前まで）
 function ltBlocks(text) {
   const L = String(text).replace(/\r\n?/g, '\n').split('\n').map(x => x.replace(/^[\s　|•・]+|[\s　]+$/g, '')).filter(x => x && !NUMLN.test(x));
@@ -1269,7 +1328,7 @@ function ltBlocks(text) {
 // 写真を読み取る：1回目は全体を日本語と英語で（段の配置を自動で判定）→ 右の段（意味）を切り出して読み直す →
 // 2回目は例文と左の段（見出し語）を英語専用の設定で読み直す
 async function ocrPages(files) {
-  const T = await loadTess(), pages = [];
+  const T = await loadTess();
   let worker = null, cur = '写真', step = '';
   const logger = m => {
     const v = m.progress || 0, st = String(m.status || '');
@@ -1281,26 +1340,34 @@ async function ocrPages(files) {
   try {
     worker = await T.createWorker('jpn+eng', 1, {logger});
     UI.ocr = 1; store(K.u, UI);
+    let pages = [];
     for (let i = 0; i < files.length; i++) {
       cur = files.length > 1 ? `${i + 1}/${files.length}枚目` : '写真';
       step = 'を読み取っています'; prog(true, cur + step + '…', 0);
-      const im = await loadImg(files[i]), cv = prepImg(im);
-      const d1 = await rec(cv, '3'), pre = photoParse(d1, cv.width, cv.height);
-      const pg = {d1, W: cv.width, H: cv.height, rj: [], eng: [], crops: []};
-      for (const rc of pre.rects) {
-        const c = cropImg(im, cv.__k, rc);
-        if (rc.kind === 'right') { step = 'の意味の段を読み直しています'; prog(true, cur + step + '…', 0); pg.rj.push({unit: rc.unit, lines: shiftLines(await rec(c, '4'), c.__ox, c.__oy, c.__m)}); }
-        else pg.crops.push({rc, c});
+      const im = await loadImg(files[i]), cv = prepImg(im), d1 = await rec(cv, '3');
+      pages.push({im, k: cv.__k, d1, W: cv.width, H: cv.height, pre: pageScan(d1, cv.width, cv.height), name: cur, rj: [], eng: [], crops: []});
+    }
+    // 2枚の時は、ページの続きになる順に並べる
+    pages = pageOrder(pages.map(p => p.pre)).map(i => pages[i]);
+    // 右の段（意味）を切り出して読み直す。2枚目は、最初の例文より上（前のページの続き）も読み直す
+    for (let i = 0; i < pages.length; i++) {
+      const p = pages[i]; cur = p.name;
+      for (const rc of p.pre.rects) {
+        if (rc.unit < 0 && i === 0) continue;
+        const c = cropImg(p.im, p.k, rc);
+        if (rc.kind === 'right') { step = 'の意味の段を読み直しています'; prog(true, cur + step + '…', 0); p.rj.push({unit: rc.unit, lines: shiftLines(await rec(c, '4'), c.__ox, c.__oy, c.__m)}); }
+        else p.crops.push({rc, c});
       }
-      pages.push(pg);
+      p.im = null;
     }
     await Promise.resolve(worker.terminate()); worker = null;
+    // 2回目：例文と左の段（見出し語）を、英語専用の設定で読み直す
     if (pages.some(p => p.crops.length)) {
       worker = await T.createWorker('eng', 1, {logger});
-      for (let i = 0; i < pages.length; i++) {
-        cur = pages.length > 1 ? `${i + 1}/${pages.length}枚目` : '写真'; step = 'の英文と見出し語を読み直しています';
-        for (const {rc, c} of pages[i].crops) { prog(true, cur + step + '…', 0); pages[i].eng.push({kind: rc.kind, unit: rc.unit, lines: shiftLines(await rec(c, rc.kind === 'sent' ? '6' : '11'), c.__ox, c.__oy, c.__m)}); }
-        pages[i].crops = [];
+      for (const p of pages) {
+        cur = p.name; step = 'の英文と見出し語を読み直しています';
+        for (const {rc, c} of p.crops) { prog(true, cur + step + '…', 0); p.eng.push({kind: rc.kind, unit: rc.unit, lines: shiftLines(await rec(c, rc.kind === 'sent' ? '6' : '11'), c.__ox, c.__oy, c.__m)}); }
+        p.crops = [];
       }
       await Promise.resolve(worker.terminate()); worker = null;
     }
@@ -1314,12 +1381,14 @@ function ocrOk() {
 }
 // 「写真から読み取る」：写真だけで取り込む
 async function photoImport(files) {
+  if (files.length > 2) { alert('写真は2枚まで選べます。例文がページをまたぐ時は、続く2ページの写真を選んでください。'); return; }
   if (!ocrOk()) return;
   const sec = DSEC, all = [], skipped = [], raws = [];
   OCRBUSY = true; prog(true, '文字認識を準備しています…', 0);
   try {
     const pages = await ocrPages(files);
-    pages.forEach((p, i) => { const res = photoParse(p.d1, p.W, p.H, {eng: p.eng, rj: p.rj}); all.push(...res.out); skipped.push(...res.skipped); raws.push(`【${i + 1}枚目】\n` + res.raw); });
+    const res = buildPhoto(pages.map(p => pageScan(p.d1, p.W, p.H, {eng: p.eng, rj: p.rj})));
+    all.push(...res.out); skipped.push(...res.skipped); raws.push(res.raw);
   } catch (e) { alert(ocrErr(e)); return; }
   finally { OCRBUSY = false; prog(false); }
   RAW = raws.join('\n');
@@ -1328,13 +1397,13 @@ async function photoImport(files) {
 }
 // 「まとめて貼り付け」＋「写真も使う」：文字はテキスト認識の文章、単語への振り分けは写真の位置で行う
 async function hybridImport() {
-  const text = $('#btxt').value, file = BPH;
+  const text = $('#btxt').value, files = BPH;
   if (!text.trim()) { alert('テキスト認識でコピーした文章を貼り付けてください。'); return; }
   if (!ocrOk()) return;
   const sec = DSEC;
   let res = null;
   OCRBUSY = true; prog(true, '文字認識を準備しています…', 0);
-  try { const p = (await ocrPages([file]))[0]; res = photoParse(p.d1, p.W, p.H, {eng: p.eng, rj: p.rj, lt: text}); }
+  try { const ps = await ocrPages(files); res = buildPhoto(ps.map(p => pageScan(p.d1, p.W, p.H, {eng: p.eng, rj: p.rj})), text); }
   catch (e) { alert(ocrErr(e)); return; }
   finally { OCRBUSY = false; prog(false); }
   RAW = '【写真と文章】\n' + res.raw;
@@ -1347,7 +1416,7 @@ async function hybridImport() {
 }
 function bphShow() {
   const n = document.getElementById('bphn'), x = document.getElementById('bphx'); if (!n) return;
-  n.textContent = BPH ? `写真：${BPH.name}` : '同じページの写真も選ぶと、単語への振り分けが正確になります';
+  n.textContent = BPH ? `写真：${BPH.map(f => f.name).join('、')}` : '同じページの写真も選ぶと、単語への振り分けが正確になります（ページをまたぐ時は2枚まで）';
   if (x) x.hidden = !BPH;
 }
 
@@ -1448,7 +1517,7 @@ function onClick(e) {
     case 'addS': addS(); break;
     case 'bulk': $('#bulk').hidden = false; $('#btxt').focus(); break;
     case 'bclose': $('#bulk').hidden = true; break;
-    case 'bimp': if (BPH) hybridImport(); else bulkImport(); break;
+    case 'bimp': if (BPH && BPH.length) hybridImport(); else bulkImport(); break;
     case 'bphx': BPH = null; bphShow(); break;
     case 'ackW': case 'ackS': ackItem(d.id); break;
     case 'openChk': openChk(); break;
@@ -1471,7 +1540,7 @@ function onChange(e) {
   if (t.dataset && t.dataset.f) onInput(e);
   else if (t.id === 'ra' || t.id === 'rb') { UI[t.id === 'ra' ? 'a' : 'b'] = +t.value; store(K.u, UI); vHome(); }
   else if (t.id === 'dsec') pickSec(+t.value);
-  else if (t.id === 'bphf' && t.files && t.files[0]) { BPH = t.files[0]; t.value = ''; bphShow(); }
+  else if (t.id === 'bphf' && t.files && t.files[0]) { const fs = [...t.files]; t.value = ''; if (fs.length > 2) { alert('写真は2枚まで選べます。'); return; } BPH = fs; bphShow(); }
   else if (t.id === 'phf' && t.files && t.files.length) { const fs = [...t.files]; t.value = ''; photoImport(fs); }
   else if (t.id === 'impf' && t.files && t.files[0]) { const f = t.files[0]; t.value = ''; importData(f); }
 }
