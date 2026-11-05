@@ -607,14 +607,23 @@ function anchorOf(x, st) {
 }
 function posOf(x) { const t = x.replace(JUNK, ''); const m = t.match(POSRX); return m ? m[1] : t[0] === '图' ? '名' : ''; }
 function dashPos(x) { const t = x.replace(JUNK, ''); return DASH.test(t) && !!posOf(t.replace(DASH, '')); }
+// 関連語の行（publicity 名 …、in the original 副 … など）：英語の語の並びのすぐ後に品詞の記号が続く
+const ENRUN = /^[A-Za-zÀ-ɏ][A-Za-zÀ-ɏ'’\-]*(?:(?:\s*…\s*|\s*\.{2,}\s*|\s+)[A-Za-zÀ-ɏ'’\-]+){0,3}/;
+function relLine(x) {
+  const t = x.replace(JUNK, ''), m = t.match(ENRUN); if (!m) return false;
+  return /^[名動形副前接助感構頭尾代定图図]/.test(t.slice(m[0].length).replace(/^\s*[(（][^)）]{0,12}[)）]/, '').replace(/^[\s\d¹²³'’]+/, ''));
+}
+// 英語の語だけの短い行（品詞と意味が次の行に続く関連語）
+function enShort(x) { const t = x.replace(JUNK, '').trim(), m = t.match(ENRUN); return !!m && /^[\s\d¹²³'’…]*$/.test(t.slice(m[0].length)); }
+function posLoose(x) { return /^[名動形副前接助感構頭尾代定图図]/.test(String(x || '').replace(JUNK, '')); }
 // 品詞だけの行、または派生語と品詞だけの行（次の行に意味が続く）
 function bare(p, st) {
   const t = p.replace(JUNK, '').trim();
   if (/^[名動形副前接助感構頭尾代定图]$/.test(t)) return true;
-  return anchorOf(p, st) >= 0 && /^[名動形副前接助感構頭尾代定图図#]?$/.test(t.replace(/[A-Za-zÀ-ɏ'’\-.…\s()（）\[\]［］~～]/g, ''));
+  return (anchorOf(p, st) >= 0 || enShort(p)) && /^[名動形副前接助感構頭尾代定图図#]?$/.test(t.replace(/[A-Za-zÀ-ɏ'’\-.…\s()（）\[\]［］~～]/g, ''));
 }
 // x が前の行 p の続きか（括弧の途中、閉じ括弧や②以降で始まる、英語の折り返し、品詞や派生語だけの行の次）
-function cont(p, x, st) { return opened(p) || /^[）)\]］】〕」』②-⑳]/.test(x) || (/[A-Za-z0-9\/\-]$/.test(p) && /^[a-z]/.test(x)) || bare(p, st); }
+function cont(p, x, st) { if (!opened(p) && relLine(x)) return false; return opened(p) || /^[）)\]］】〕」』②-⑳]/.test(x) || (/[A-Za-z0-9\/\-]$/.test(p) && /^[a-z]/.test(x)) || bare(p, st); }
 function joinL(L) { return L.reduce((a, x) => a + (a && /[A-Za-z0-9]$/.test(a) && /^[A-Za-z]/.test(x) ? ' ' : '') + x, ''); }
 // 派生語の行の先頭から「単語」と品詞を取り出す
 function splitHead(t, s) {
@@ -703,7 +712,8 @@ function buildWord(j, L, A, st) {
   const items = [];
   for (let i = 0; i < L.length; i++) {
     const x = L[i], c = i > 0 && cont(L[i - 1], x, st);
-    const k = A[i] === j && !c ? 'd' : !c && items.length && (dashPos(x) || posOf(x)) ? 'o' : '';
+    const rel = relLine(x) || (enShort(x) && posLoose(L[i + 1]));
+    const k = (A[i] === j || rel) && !c ? 'd' : !c && items.length && (dashPos(x) || posOf(x)) ? 'o' : '';
     if (!items.length || (k && !c)) items.push({k: k || 'm', L: []});
     items[items.length - 1].L.push(x);
   }
@@ -748,7 +758,7 @@ function sortMeanings(words, S) {
       const mk = words[j + 1].mk;
       if (pick < 0 && mk >= lo && mk <= hi && ok(mk)) pick = mk;
     }
-    if (pick < 0) for (let i = lo; i <= hi; i++) if (ok(i)) { pick = i; break; }
+    if (pick < 0) for (let i = lo; i <= hi; i++) if (ok(i) && (i === hi || !relLine(S[i]))) { pick = i; break; } // 関連語の行は次の語の始まりにしない
     b.push(pick < 0 ? hi : pick);
   }
   b.push(n);
@@ -772,7 +782,7 @@ function isSentStart(L, k) {
   return nWords(x) >= 2 && j < L.length && enOnly(L[j]) && /^[a-z]/.test(L[j]);
 }
 // 和訳の前の行に続いている、括弧や英字のない日本語だけの行
-function plainJa(x) { return JPRE.test(x) && !/[A-Za-z（）()［］\[\]【】〔〕《》〈〉①-⑳]/.test(x) && !/。[」』]?$/.test(x); }
+function plainJa(x) { return JPRE.test(x) && !posOf(x) && !/[A-Za-z（）()［］\[\]【】〔〕《》〈〉①-⑳]/.test(x) && !/。[」』]?$/.test(x); }
 function ocrParse(text) {
   const L = [], blocks = [], out = [], skipped = [];
   for (const raw of String(text).replace(/\r\n?/g, '\n').split('\n')) {
@@ -1070,12 +1080,12 @@ async function photoImport(files) {
   } catch (e) {
     OCRBUSY = false; prog(false);
     if (worker) Promise.resolve(worker.terminate()).catch(() => {});
-    alert(e && e.message === 'load' ? '文字認識の部品を読み込めませんでした。電波のある所でもう一度試してください。' : '写真を読み取れませんでした。別の写真で試してください。');
+    alert(e && e.message === 'load' ? '文字認識の部品を読み込めませんでした。電波のある所でもう一度試してください。' : '写真を読み取れませんでした。\n理由：' + String((e && (e.message || e)) || '不明'));
     return;
   }
   Promise.resolve(worker.terminate()).catch(() => {});
   OCRBUSY = false; prog(false); RAW = raws.join('\n');
-  if (!all.length) { if (VIEW === 'data') keepScroll(vData); alert('写真から英文と和訳を見つけられませんでした。ページを平らにして真上から、1ページずつ撮った写真で試してください。'); return; }
+  if (!all.length) { if (VIEW === 'data') keepScroll(vData); alert('写真から英文と和訳を見つけられませんでした。ページを平らにして真上から、1ページずつ撮った写真で試してください。\n読み取れた文字は「写真から読み取った文字（確認用）」で見られます。'); return; }
   importBlocks(all, skipped, sec);
 }
 
@@ -1085,7 +1095,7 @@ function bracketBad(t) {
   for (const c of String(t)) { const o = OPN.indexOf(c), k = CLS.indexOf(c); if (o >= 0) st.push(o); else if (k >= 0 && st.pop() !== k) return true; }
   return st.length > 0;
 }
-function numBad(t) { return String(t).split(/[　\s]+/).some(p => [...p.matchAll(/[①-⑳]/g)].some((m, i) => m[0].charCodeAt(0) - 0x245F !== i + 1)); }
+function numBad(t) { let pv = 0; for (const m of String(t).matchAll(/[①-⑳]/g)) { const n = m[0].charCodeAt(0) - 0x245F; if (n !== pv + 1 && n !== 1) return true; pv = n; } return false; }
 function checkWord(w) {
   if (!String(w.w || '').trim()) return [];
   const r = (w.chk || []).slice(), ja = String(w.ja || '');
