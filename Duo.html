@@ -139,7 +139,10 @@ label.btn{position:relative;display:flex;align-items:center;justify-content:cent
 .mv{padding:4px 14px;font-size:15px;line-height:1.3}
 .lnk{background:none;border:0;padding:6px 2px;font-size:13px;color:var(--sub);text-decoration:underline;text-underline-offset:3px}
 .lnk.warn{color:var(--red)}
-.addrow label.add{display:inline-flex;padding:8px 12px}
+.addrow label.add,.bph label.add{display:inline-flex;padding:8px 12px}
+.bph{display:flex;align-items:center;flex-wrap:wrap;gap:4px 10px;margin-top:2px}
+.bph label.add{margin-top:8px}
+.bph .small{flex:1 1 12em}
 .ocrp{margin-top:10px}
 .ocrp p{margin:0 0 4px}
 .ocrp progress{width:100%}
@@ -499,7 +502,8 @@ function vData() {
 <div id="ocrp" class="ocrp"${OCRBUSY ? '' : ' hidden'}><p class="small" id="ocrm"></p><progress id="ocrb" max="1" value="0"></progress></div>
 ${RAW ? `<details class="raw"><summary class="small sub">写真から読み取った文字（うまく取り込めない時の確認用）</summary><textarea readonly rows="8">${esc(RAW)}</textarea></details>` : ''}
 <div class="cks" id="cks" hidden></div>
-<div id="bulk" hidden><textarea id="btxt" rows="6" placeholder="写真のテキスト認識でコピーした文章を、そのまま貼り付けます" ${NOAUTO}></textarea><div class="btns"><button data-act="bclose">閉じる</button><button class="pri" data-act="bimp">取り込む</button></div></div>
+<div id="bulk" hidden><textarea id="btxt" rows="6" placeholder="写真のテキスト認識でコピーした文章を、そのまま貼り付けます" ${NOAUTO}></textarea>
+<div class="bph"><label class="btn add">写真も使う<input type="file" id="bphf" class="vh" accept="image/*"></label><span class="small sub" id="bphn"></span><button class="lnk" id="bphx" data-act="bphx" hidden>外す</button></div><div class="btns"><button data-act="bclose">閉じる</button><button class="pri" data-act="bimp">取り込む</button></div></div>
 ${S.map(s => senBox(s, N)).join('') || '<p class="note">「英文を追加」で、このSectionの最初の英文を入れてください。</p>'}</div>
 <div class="panel pad"><h3 class="hd">入力済みのセクション</h3><div class="grid">${g}</div></div>
 <div class="panel pad"><h3 class="hd">バックアップ</h3>
@@ -509,7 +513,7 @@ ${S.map(s => senBox(s, N)).join('') || '<p class="note">「英文を追加」で
   app.querySelectorAll('textarea').forEach(grow);
   for (const s of S) for (const w of s.w) wstat(w, s);
   for (const s of S) { ckS(s); for (const w of s.w) ckW(w); }
-  ckSum();
+  ckSum(); bphShow();
 }
 function grow(t) { t.style.height = 'auto'; t.style.height = t.scrollHeight + 2 + 'px'; }
 // 単語が英文中に見つからない時だけ「英文中の形」の欄を出す
@@ -646,10 +650,10 @@ const JA = /[ぁ-んァ-ヶ一-龠々ー]/;
 const OPN = '（(［[〔【「『', CLS = '）)］]〕】」』';
 const CNTOK = /[復転避収答想顧路数覧調実論座癖頭述語笛紅]/; // 回・口で始まる語。それ以外の先頭の回・口は Ⓒ Ⓤ の読み間違いとして省く
 function normT(t) {
-  return t.replace(/<->|<>/g, '↔').replace(/\.{2,}|‥/g, '…').replace(/…{2,}/g, '…').replace(/[~〜]/g, '～')
+  return t.replace(/(?:ょ[と4]ょ?|な[=＝])(?=[がのをにで）)])/g, 'など').replace(/<->|<>/g, '↔').replace(/\.{2,}|‥/g, '…').replace(/[~〜]/g, '～')
     .replace(/…[.,](?=\s*[ぁ-んァ-ヶ一-龠々（])/g, '…，')
     .replace(/([ぁ-んァ-ヶ一-龠々])\.(?![A-Za-z])/g, '$1…')
-    .replace(/([ぁ-んァ-ヶ一-龠々）)])\s*,\s*(?=[ぁ-んァ-ヶ一-龠々（(…])/g, '$1，');
+    .replace(/([ぁ-んァ-ヶ一-龠々）)])\s*,\s*(?=[ぁ-んァ-ヶ一-龠々（(…])/g, '$1，').replace(/…{2,}/g, '…');
 }
 // 「い」が英字の U に読み取られたもの（新しU (unique → 新しい）を直す
 function fixI(t, note) { return t.replace(/([ぁ-ん])\s*[UuＵ](?=\s*[（(]|\s*$)/g, (m0, a) => { note('「い」が英字の U に読み取られていたところを直しました'); return a + 'い'; }); }
@@ -837,7 +841,7 @@ function ocrParse(text) {
   return {out, skipped};
 }
 // 取り込み（まとめて貼り付け・写真から読み取る で共通）。確認が必要なところは chk に記録する
-function importBlocks(out, skipped, sec) {
+function importBlocks(out, skipped, sec, pre) {
   const d = DB.sec[sec] || (DB.sec[sec] = {s: []}), touched = [];
   let first = null, ns = 0, nw = 0, nm = 0, dup = 0, fill = 0;
   for (const b of out) {
@@ -860,7 +864,7 @@ function importBlocks(out, skipped, sec) {
     keepScroll(vData);
     const el = first && app.querySelector(`[data-sid="${first}"]`); if (el) el.scrollIntoView({block: 'start'});
   }
-  const flagged = touched.filter(sentIssues).length, msg = [];
+  const flagged = touched.filter(sentIssues).length, msg = pre ? [pre] : [];
   if (ns) msg.push(`英文${ns}文・単語${nw}語を追加し、${nm}語に意味を入れました。`);
   if (dup) msg.push(`すでにある英文${dup}文は追加せず、意味が空欄だった${fill}語に意味を入れました。`);
   if (skipped.length) msg.push(`英文か和訳が欠けていた部分（${skipped.join('、')}）は読み飛ばしました。`);
@@ -875,7 +879,7 @@ function bulkImport() {
 
 /* ===== 写真から読み取る：端末の中で動く文字認識（Tesseract）を使う。写真は端末の外に送らない ===== */
 const TESS = ['https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js', 'https://unpkg.com/tesseract.js@5.1.1/dist/tesseract.min.js', 'https://cdn.jsdelivr.net/npm/tesseract.js@5.0.5/dist/tesseract.min.js'];
-let TESSP = null, OCRBUSY = false, RAW = '';
+let TESSP = null, OCRBUSY = false, RAW = '', BPH = null;
 function loadScript(u) { return new Promise((ok, ng) => { const e = document.createElement('script'); e.src = u; e.async = true; e.onload = ok; e.onerror = () => { e.remove(); ng(new Error('load')); }; document.head.appendChild(e); }); }
 function loadTess() {
   if (window.Tesseract) return Promise.resolve(window.Tesseract);
@@ -886,23 +890,58 @@ function loadTess() {
   return TESSP;
 }
 function loadImg(f) {
-  return new Promise((ok, ng) => { const u = URL.createObjectURL(f), im = new Image(); im.onload = () => { URL.revokeObjectURL(u); ok(im); }; im.onerror = () => { URL.revokeObjectURL(u); ng(new Error('img')); }; im.src = u; });
+  return new Promise((ok, ng) => { const u = URL.createObjectURL(f), im = new Image(); im.onload = () => { URL.revokeObjectURL(u); ok(im); }; im.onerror = () => { URL.revokeObjectURL(u); ng(new Error('写真を開けませんでした')); }; im.src = u; });
 }
-// 読み取りやすいように、大きさをそろえて白黒にし、明るさの幅を広げる
+// 白黒にし、影や明るさのムラをならして（区画ごとの紙の明るさで割る）、明るさの幅を広げる
+function cleanPx(cx, W, H) {
+  const d = cx.getImageData(0, 0, W, H), px = d.data, n = W * H, gray = new Uint8ClampedArray(n);
+  for (let i = 0, j = 0; j < n; i += 4, j++) gray[j] = (px[i] * 299 + px[i + 1] * 587 + px[i + 2] * 114) / 1000;
+  const B = Math.max(16, Math.round(Math.max(W, H) / 40)), gw = Math.ceil(W / B), gh = Math.ceil(H / B), bg = new Float32Array(gw * gh), hist = new Uint32Array(256);
+  for (let by = 0; by < gh; by++) for (let bx = 0; bx < gw; bx++) {
+    hist.fill(0); let cnt = 0;
+    const ye = Math.min(H, (by + 1) * B), xe = Math.min(W, (bx + 1) * B);
+    for (let y = by * B; y < ye; y += 2) for (let x = bx * B; x < xe; x += 2) { hist[gray[y * W + x]]++; cnt++; }
+    let acc = 0, v = 255; for (let q = 255; q >= 0; q--) { acc += hist[q]; if (acc >= cnt * 0.1) { v = q; break; } }
+    bg[by * gw + bx] = Math.max(v, 60);
+  }
+  const sm = new Float32Array(gw * gh);
+  for (let by = 0; by < gh; by++) for (let bx = 0; bx < gw; bx++) { let s = 0, c = 0; for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { const yy = by + dy, xx = bx + dx; if (yy >= 0 && yy < gh && xx >= 0 && xx < gw) { s += bg[yy * gw + xx]; c++; } } sm[by * gw + bx] = s / c; }
+  const h2 = new Uint32Array(256);
+  for (let y = 0; y < H; y++) {
+    const fy = Math.min(gh - 1, Math.max(0, y / B - 0.5)), ya = Math.floor(fy), yb = Math.min(gh - 1, ya + 1), ty = fy - ya;
+    for (let x = 0; x < W; x++) {
+      const fx = Math.min(gw - 1, Math.max(0, x / B - 0.5)), xa = Math.floor(fx), xb = Math.min(gw - 1, xa + 1), tx = fx - xa;
+      const b = (sm[ya * gw + xa] * (1 - tx) + sm[ya * gw + xb] * tx) * (1 - ty) + (sm[yb * gw + xa] * (1 - tx) + sm[yb * gw + xb] * tx) * ty;
+      const j = y * W + x, v = Math.min(255, gray[j] * 255 / b) | 0;
+      gray[j] = v; h2[v]++;
+    }
+  }
+  let lo = 0, acc = 0; for (let g = 0; g < 256; g++) { acc += h2[g]; if (acc > n * 0.01) { lo = g; break; } }
+  const k = 250 > lo ? 255 / (250 - lo) : 1;
+  for (let i = 0, j = 0; j < n; i += 4, j++) { const g = Math.max(0, Math.min(255, (gray[j] - lo) * k)) | 0; px[i] = px[i + 1] = px[i + 2] = g; px[i + 3] = 255; }
+  cx.putImageData(d, 0, 0);
+}
+// 読み取り用の画像（長い辺を 2200〜3000 にそろえる）。__k は元の写真との倍率
 function prepImg(im) {
   const w0 = im.naturalWidth, h0 = im.naturalHeight, L = Math.max(w0, h0);
   const sc = L > 3000 ? 3000 / L : L < 2200 ? 2200 / L : 1, W = Math.round(w0 * sc), H = Math.round(h0 * sc);
   const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
-  const cx = cv.getContext('2d'); cx.drawImage(im, 0, 0, W, H);
-  const d = cx.getImageData(0, 0, W, H), px = d.data, hist = new Uint32Array(256), n = W * H;
-  for (let i = 0; i < px.length; i += 4) { const g = (px[i] * 299 + px[i + 1] * 587 + px[i + 2] * 114) / 1000 | 0; px[i] = g; hist[g]++; }
-  let lo = 0, hi = 255, acc = 0;
-  for (let g = 0; g < 256; g++) { acc += hist[g]; if (acc > n * 0.01) { lo = g; break; } }
-  acc = 0; for (let g = 255; g >= 0; g--) { acc += hist[g]; if (acc > n * 0.05) { hi = g; break; } }
-  const k = hi > lo ? 255 / (hi - lo) : 1;
-  for (let i = 0; i < px.length; i += 4) { const g = Math.max(0, Math.min(255, (px[i] - lo) * k)) | 0; px[i] = px[i + 1] = px[i + 2] = g; }
-  cx.putImageData(d, 0, 0);
+  const cx = cv.getContext('2d'); cx.drawImage(im, 0, 0, W, H); cleanPx(cx, W, H);
+  cv.__k = w0 / W;
   return cv;
+}
+// 読み直す範囲を、元の写真からできるだけ細かく切り出す（__m は読み取り用の画像に対する倍率）
+function cropImg(im, k, rc) {
+  const m = Math.max(1, Math.min(k, 3500 / Math.max(rc.w, rc.h)));
+  const sx = Math.max(0, rc.x * k), sy = Math.max(0, rc.y * k), sw = Math.min(im.naturalWidth - sx, rc.w * k), sh = Math.min(im.naturalHeight - sy, rc.h * k);
+  const c = document.createElement('canvas'); c.width = Math.max(1, Math.round(sw / k * m)); c.height = Math.max(1, Math.round(sh / k * m));
+  const cx = c.getContext('2d'); cx.drawImage(im, sx, sy, sw, sh, 0, 0, c.width, c.height); cleanPx(cx, c.width, c.height);
+  c.__ox = rc.x; c.__oy = rc.y; c.__m = m;
+  return c;
+}
+function shiftLines(data, dx, dy, m) {
+  const f = 1 / (m || 1);
+  return ocrLines(data).map(l => ({words: (l.words && l.words.length ? l.words : [l]).filter(w => w && w.bbox).map(w => ({text: w.text, confidence: w.confidence, bbox: {x0: w.bbox.x0 * f + dx, y0: w.bbox.y0 * f + dy, x1: w.bbox.x1 * f + dx, y1: w.bbox.y1 * f + dy}}))}));
 }
 function prog(on, msg, v) {
   const box = document.getElementById('ocrp'); if (!box) return;
@@ -930,9 +969,16 @@ function hwFrom(text, en) {
   }
   return '';
 }
+// 文字の並びの近さ（2文字ずつの組の重なり）。inc(a, b) は a の組のうち b にもあるものの割合
+function bigr(t) { const s = String(t).normalize('NFKC').toLowerCase().replace(/[^a-z0-9ぁ-んァ-ヶ一-龠々ー]+/g, ''), m = new Map(); for (let i = 0; i + 1 < s.length; i++) { const k = s.slice(i, i + 2); m.set(k, (m.get(k) || 0) + 1); } return {m, n: Math.max(1, s.length - 1)}; }
+function bcommon(A, B) { let c = 0; for (const [k, v] of A.m) { const w = B.m.get(k); if (w) c += Math.min(v, w); } return c; }
+function ovl(A, B) { return bcommon(A, B) / Math.min(A.n, B.n); }
+function inc(A, B) { return bcommon(A, B) / A.n; }
 // 文字認識の結果（文字と位置）から、英文・和訳・見出し語・意味を取り出す。
-// eng は英語専用の設定で読み直した結果（例文と左の段）。rects は読み直す範囲
-function photoParse(data, W, H, eng) {
+// ex.eng：例文と左の段を英語専用で読み直した結果、ex.rj：右の段を読み直した結果、ex.lt：テキスト認識でコピーした文章（あれば文字はこちらを使う）。
+// rects は読み直す範囲
+function photoParse(data, W, H, ex) {
+  ex = ex || {};
   const out = [], skipped = [], raw = [], rects = [];
   const med = a => { const b = a.slice().sort((x, y) => x - y); return b.length ? b[b.length >> 1] : 0; };
   const wordsOf = l => (l.words && l.words.length ? l.words : [l]).filter(w => w && w.bbox && String(w.text || '').trim())
@@ -969,7 +1015,8 @@ function photoParse(data, W, H, eng) {
     if (cR - cL > W * 0.12 && Rx.length) DIV = Rx[Math.floor(Rx.length * 0.1)] - lh * 0.4;
   }
   // 段の境目の点線の読み取り（ii、: など）を除く
-  CH = CH.filter(c => !(c.x1 - c.x0 < lh * 1.2 && Math.abs(c.x0 - DIV) < lh * 2.5 && /^[ilI1|!¦:;.,'`´・：\-_~"丨]+$/.test(c.t)));
+  const noDots = cs => cs.filter(c => !(c.x1 - c.x0 < lh * 1.2 && Math.abs(c.x0 - DIV) < lh * 2.5 && /^[ilI1|!¦:;.,'`´・：\-_~"丨]+$/.test(c.t)));
+  CH = noDots(CH);
   // 例文：左の段から始まる、幅の広い英語の行（先頭が読み間違えられて小文字になっていても、4語以上なら例文とみなす）
   const SENT = CH.filter(c => wideEn(c) && c.x0 < DIV - lh && jaN(c.t) <= 3 && !/[\/（）［］]/.test(c.t) && nWords(c.t) >= 3 && (nWords(c.t) >= 4 || /^["“‘'(]?[A-Z]/.test(enText(c.t)))).sort((a, b) => a.y - b.y);
   const used = new Set(SENT), units = [];
@@ -983,15 +1030,9 @@ function photoParse(data, W, H, eng) {
     if (!nx) break;
     used.add(nx); u.en += ' ' + enText(nx.t); u.lastY = nx.y; u.bot = nx.y1; u.ry1 = Math.max(u.ry1, nx.ry1); u.cf.push(nx.cf);
   }
-  // 英語専用の設定で読み直す範囲：例文の帯と、その下の左の段
-  const addRect = (kind, unit, x, y, w, h) => { x = Math.max(0, Math.round(x)); y = Math.max(0, Math.round(y)); w = Math.min(W - x, Math.round(w)); h = Math.min(H - y, Math.round(h)); if (w > lh && h > lh * 0.8) rects.push({kind, unit, x, y, w, h}); };
-  units.forEach((u, k) => {
-    addRect('sent', k, 0, u.ry0 - lh * 0.5, W, u.ry1 - u.ry0 + lh);
-    const y0 = u.ry1 + lh * 0.2, y1 = k + 1 < units.length ? units[k + 1].ry0 - lh * 0.2 : H;
-    addRect('left', k, 0, y0, DIV - lh * 0.3, y1 - y0);
-  });
   // 残りを左右の段に分ける（つながって読まれた行は境目で切る）
-  const Lc = [], Rc = [];
+  const Lc = [];
+  let Rc = [];
   for (const c of CH) {
     if (used.has(c)) continue;
     if (c.x0 >= DIV) { Rc.push(c); continue; }
@@ -1001,6 +1042,23 @@ function photoParse(data, W, H, eng) {
   // 右の段の右端より先（隣のページ）の文字は捨てる
   const rx = Rc.filter(c => c.x0 < DIV + (W - DIV) * 0.5).map(c => c.x1).sort((a, b) => a - b);
   const EDGE = rx.length ? rx[Math.floor(rx.length * 0.9)] : W;
+  // 読み直す範囲：例文の帯（英語）、その下の左の段（英語）と右の段（日本語）
+  const addRect = (kind, unit, x, y, w, h) => { x = Math.max(0, Math.round(x)); y = Math.max(0, Math.round(y)); w = Math.min(W - x, Math.round(w)); h = Math.min(H - y, Math.round(h)); if (w > lh && h > lh * 0.8) rects.push({kind, unit, x, y, w, h}); };
+  units.forEach((u, k) => {
+    addRect('sent', k, 0, u.ry0 - lh * 0.5, W, u.ry1 - u.ry0 + lh);
+    const y0 = u.ry1 + lh * 0.2, y1 = k + 1 < units.length ? units[k + 1].ry0 - lh * 0.2 : H;
+    addRect('left', k, 0, y0, DIV - lh * 0.3, y1 - y0);
+    addRect('right', k, DIV - lh * 0.6, y0, Math.min(W, EDGE + lh) - (DIV - lh * 0.6), y1 - y0);
+  });
+  // 右の段を読み直した結果があれば、その範囲の右の段を置き換える（うまく読めなかった時は1回目のまま）
+  const RJ = [];
+  for (const r of ex.rj || []) {
+    const u = units[r.unit]; if (!u) continue;
+    const top = u.bot, bot = r.unit + 1 < units.length ? units[r.unit + 1].top : Infinity;
+    const nc = noDots(chunks(r.lines.map(wordsOf).map(undot))).filter(c => c.x0 >= DIV - lh && c.y > top && c.y < bot);
+    if (nc.length < 3) continue;
+    Rc = Rc.filter(c => !(c.y > top && c.y < bot)).concat(nc); RJ.push(...nc);
+  }
   const rows = cs => {
     const rs = [];
     for (const c of cs.slice().sort((a, b) => a.y - b.y)) {
@@ -1010,6 +1068,7 @@ function photoParse(data, W, H, eng) {
     return rs.map(r => {
       r.cs.sort((a, b) => a.x0 - b.x0);
       let cs = r.cs, posBad = false;
+      // 行の先頭の品詞の四角が品詞以外の文字（名 → 多 など）に読まれたものは外す
       if (cs.length > 1 && /^[ぁ-んァ-ヶ一-龠々]$/.test(cs[0].t) && !/[名動形副前接助感構頭尾代定]/.test(cs[0].t) && cs[1].x0 - cs[0].x1 > lh * 0.6) { cs = cs.slice(1); posBad = true; }
       const ws = r.cs.flatMap(c => c.ws);
       return {t: cs.map(c => c.t).join(' '), x0: r.cs[0].x0, y: r.cs[0].y, y0: r.y0, y1: r.y1, posBad, cf: ws.reduce((a, w) => a + w.cf, 0) / ws.length};
@@ -1017,7 +1076,7 @@ function photoParse(data, W, H, eng) {
   };
   const Rrows = rows(Rc.filter(c => c.x0 <= EDGE - lh)), Lrows = rows(Lc);
   // 英語専用で読み直した結果：例文は読み直した方を使い、左の段は読み直した方を先に探す
-  const E = eng || [];
+  const E = ex.eng || [];
   const LcE = chunks(E.filter(e => e.kind === 'left').flatMap(e => e.lines).map(wordsOf).map(undot)).filter(c => c.x0 < DIV);
   const LrowsE = rows(LcE);
   const engSent = k => {
@@ -1048,24 +1107,68 @@ function photoParse(data, W, H, eng) {
     return ws;
   };
   const trim = x => x.replace(/^[\s|｜\[\]［］_\-—–=~:;'"`]+|[\s|｜\[\]［］_\-—–=~:;'"`]+$/g, '');
+  // テキスト認識でコピーした文章（あれば）：例文ごとに区切り、写真の例文と一致したところの文字を使う（どの語の行かは写真の位置で決める）
+  const LT = ex.lt ? ltBlocks(ex.lt) : null;
+  let ltCand = 0, ltHit = 0;
   units.forEach((u, k) => {
     const re = engSent(k); if (re) { u.en = re.t; u.cf = re.cf.length ? re.cf : u.cf; }
+    let blk = null;
+    if (LT) { let bs = 0; for (const b of LT) { if (b.used) continue; const v = ovl(bigr(b.en), bigr(u.en)); if (v > bs) { bs = v; blk = b; } } if (blk && bs >= 0.45) blk.used = true; else blk = null; }
+    if (blk) u.en = blk.en;
     const bot = k + 1 < units.length ? units[k + 1].top : Infinity, label = u.en.slice(0, 16);
+    const chkS = [], noteS = v => { if (!chkS.includes(v)) chkS.push(v); };
+    if (LT && !blk) noteS('貼り付けた文章の中にこの例文が見つからなかったため、写真の読み取りだけで取り込みました');
     const rR = Rrows.filter(r => r.y > u.bot && r.y < bot).map(r => Object.assign({}, r, {t: cleanRow(r.t)}));
     // 和訳：右の段の最後の「。」で終わる行（前の行に続いていればつなぐ）
-    let te = -1; for (let i = rR.length - 1; i >= 0; i--) if (JPRE.test(rR[i].t) && /。[」』]?[^ぁ-んァ-ヶ一-龠々。]{0,3}$/.test(trim(rR[i].t))) { te = i; break; }
-    if (te < 0) { skipped.push(label); return; }
-    let ts = te; while (ts > 0 && te - ts < 2 && plainJa(trim(rR[ts - 1].t)) && rR[ts].y - rR[ts - 1].y < lh * 2.2) ts--;
-    const ja = rR.slice(ts, te + 1).map(r => trim(r.t)).join('').replace(/([^\x00-\x7f])\s+(?=[^\x00-\x7f])/g, '$1').replace(/(。[」』]?)[^。]*$/, '$1').trim();
+    let te = -1, ts = -1, ja = '';
+    for (let i = rR.length - 1; i >= 0; i--) if (JPRE.test(rR[i].t) && /。[」』]?[^ぁ-んァ-ヶ一-龠々。]{0,3}$/.test(trim(rR[i].t))) { te = i; break; }
+    if (te >= 0) {
+      ts = te; while (ts > 0 && te - ts < 2 && plainJa(trim(rR[ts - 1].t)) && rR[ts].y - rR[ts - 1].y < lh * 2.2) ts--;
+      ja = rR.slice(ts, te + 1).map(r => trim(r.t)).join('').replace(/([^\x00-\x7f])\s+(?=[^\x00-\x7f])/g, '$1').replace(/(。[」』]?)[^。]*$/, '$1').trim();
+    } else if (blk) { te = ts = rR.length; }
+    else { skipped.push(label); return; }
+    const jaRows = rR.slice(ts, te + 1);
     // 見出し語：左の段で、英文の中に見つかる語（2行に分かれたものはつなぐ）。読み直した方を優先し、足りない語を1回目の結果から補う
-    const inU = r => r.y > u.bot && r.y < bot, maxY = rR[te].y;
+    const inU = r => r.y > u.bot && r.y < bot, maxY = te < rR.length ? rR[te].y : Infinity;
     const words = findHw(LrowsE.filter(inU), u.en, maxY);
     for (const w of findHw(Lrows.filter(inU), u.en, maxY)) if (!words.some(v => norm(v.hw) === norm(w.hw) || Math.abs(v.y - w.y) < lh * 0.8)) words.push(w);
+    // 文章側：和訳と見出し語。写真で見つからなかった見出し語は、左の段で綴りの近い行の位置を使う
+    let bl = null;
+    const missing = [];
+    if (blk) {
+      const L = blk.L, usedL = new Set(); for (let i = 0; i < blk.i1; i++) usedL.add(i);
+      let tb = -1; for (let i = L.length - 1; i >= blk.i1; i--) if (JPRE.test(L[i]) && /。[」』]?$/.test(L[i])) { tb = i; break; }
+      if (tb >= 0) { let t0 = tb; while (t0 - 1 >= blk.i1 && tb - t0 < 2 && plainJa(L[t0 - 1])) t0--; ja = L.slice(t0, tb + 1).join(''); u.jaLT = true; for (let i = t0; i <= tb; i++) usedL.add(i); }
+      const ltH = [];
+      for (let i = blk.i1; i < L.length; i++) {
+        if (usedL.has(i)) continue;
+        const c0 = L[i].replace(/^\d+\s*/, '');
+        if (!HWRE.test(c0) || !/[A-Za-z]/.test(c0)) continue;
+        let hw = cleanHw(c0), i2 = i;
+        const nx = (L[i + 1] || '').replace(/^\d+\s*/, '');
+        if (HWRE.test(nx) && /^(?:[a-z]+|…|～|\()/.test(nx) && STOPW.has((nx.match(/^[a-z]+/) || [''])[0])) { const h2 = cleanHw(hw + ' ' + nx); if (locate(u.en, h2)) { hw = h2; i2 = i + 1; } }
+        if (!toks(hw).some(o => !STOPW.has(o.t)) || !locate(u.en, hw)) continue;
+        if (ltH.some(h => norm(h) === norm(hw))) continue;   // 2回目以降（fair² など）は意味の行
+        ltH.push(hw); for (let q = i; q <= i2; q++) usedL.add(q); if (PRON.test(L[i2 + 1] || '')) usedL.add(i2 + 1);
+      }
+      const Lall = LrowsE.filter(inU).concat(Lrows.filter(inU));
+      for (const hw of ltH) {
+        const w0 = words.find(w => norm(w.hw) === norm(hw)); if (w0) { w0.hw = hw; continue; }
+        const hb = bigr(hw); let best = null, bs = 0;
+        for (const r of Lall) { if (r.y > maxY || words.some(w => Math.abs(w.y - r.y) < lh * 0.8)) continue; const v = inc(hb, bigr(r.t)); if (v > bs) { bs = v; best = r; } }
+        if (best && bs >= 0.5) words.push({hw, y: best.y}); else missing.push(hw);
+      }
+      bl = {L, usedL, order: ltH.map(norm)};
+    }
     words.sort((a, b) => a.y - b.y);
-    if (!words.length) { skipped.push(label); return; }
+    if (!words.length) {
+      // 写真で見出し語の位置が一つも分からない時は、文章だけで振り分ける
+      if (blk) { const r2 = ocrParse(blk.L.join('\n')); if (r2.out.length) { r2.out.forEach(o => o.chk.push('写真から見出し語の位置が分からなかったため、文章だけで振り分けました')); out.push(...r2.out); return; } }
+      skipped.push(label); return;
+    }
     // 意味の行の割り当て：各見出し語の近くで、その語の意味の書き出しらしい行（品詞の記号で始まる、左に出ている、
     // 前の行の続きでない、前の語の派生語でない）を探し、そこから次の語の書き出しの前までをその語の行とする
-    const st = words.map(w => { const b = baseOf(w.hw); return {b, s: stemOf(b)}; });
+    let st = words.map(w => { const b = baseOf(w.hw); return {b, s: stemOf(b)}; });
     const mean = rR.slice(0, ts), xmed = med(mean.map(r => r.x0));
     const startScore = (i, j) => {
       const r = mean[i], pv = mean[i - 1], a = anchorOf(r.t, st);
@@ -1088,82 +1191,160 @@ function photoParse(data, W, H, eng) {
       bd.push(best);
     }
     bd.push(mean.length);
-    const chkS = [], noteS = x => { if (!chkS.includes(x)) chkS.push(x); };
+    let wl = words.map((w, j) => mean.slice(bd[j], bd[j + 1]));
+    // 文章の行を、文字の並びが一番近い写真の行（どの語の行か分かっている）に対応づける
+    if (bl) {
+      const rowsU = []; wl.forEach((rs, j) => rs.forEach(r => { const b = bigr(r.t); rowsU.push({j, y: r.y, r, b, cov: b.n < 3}); }));
+      const asg = [], ok = i => !bl.usedL.has(i) && !PRON.test(bl.L[i]);
+      let cand = 0, hit = 0, prevY = -Infinity;
+      bl.L.forEach((l, i) => {
+        if (!ok(i)) return;
+        const b = bigr(l); if (b.n < 3) return;
+        cand++;
+        const sc = rowsU.map(r => { const c = bcommon(b, r.b); return c >= 3 ? c / Math.min(b.n, r.b.n) : 0; });
+        const bs = Math.max(0, ...sc); if (bs < 0.35) return;
+        // ほぼ同じ近さの行が複数ある時（短い行など）は、前の行の位置より後で一番近い行を選ぶ
+        const cs = rowsU.filter((r, q) => sc[q] >= bs - 0.1);
+        const best = cs.filter(r => r.y > prevY + lh * 0.3).sort((a, c) => a.y - c.y)[0] || cs.filter(r => r.y >= prevY - lh * 0.5).sort((a, c) => a.y - c.y)[0] || cs.sort((a, c) => Math.abs(a.y - prevY) - Math.abs(c.y - prevY))[0];
+        asg[i] = {j: best.j, y: best.y}; best.hit = true; hit++; prevY = best.y;
+      });
+      // 対応が見つからなかった行は、すぐ前（無ければすぐ後）の行と同じ語に付ける
+      for (let i = 1; i < bl.L.length; i++) if (!asg[i] && ok(i) && asg[i - 1]) asg[i] = {j: asg[i - 1].j, y: asg[i - 1].y};
+      for (let i = bl.L.length - 2; i >= 0; i--) if (!asg[i] && ok(i) && asg[i + 1]) asg[i] = {j: asg[i + 1].j, y: asg[i + 1].y};
+      ltCand += cand; ltHit += hit;
+      if (cand >= 5 && hit < cand * 0.3) noteS('写真と文章の内容があまり一致しませんでした。同じページか確認してください');
+      const lines = words.map(() => []);
+      asg.forEach((a, i) => { if (a) lines[a.j].push({t: bl.L[i], y: a.y, i}); });
+      // 文章のどの行にも似ていない写真の行（日本語が6文字以上あり、読み取りの確度が低くないもの）だけ、写真の読み取りで補う
+      const LB = bl.L.map((l, i) => ok(i) ? bigr(l) : null).filter(Boolean);
+      for (const r of rowsU) if (!r.cov && !r.hit && jaN(r.r.t) >= 6 && !(r.r.cf < 60) && LB.every(b => inc(r.b, b) < 0.25)) lines[r.j].push({t: r.r.t, y: r.y, i: -1, fb: true, cf: r.r.cf, posBad: r.r.posBad});
+      wl = lines.map(ls => ls.sort((a, b) => a.y - b.y || a.i - b.i));
+      // 写真で位置が分からなかった見出し語は、文章の順番の位置に加える（意味は空欄）
+      for (const hw of missing) {
+        const q = bl.order.indexOf(norm(hw)); let at = 0;
+        for (let p = q - 1; p >= 0; p--) { const idx = words.findIndex(w => norm(w.hw) === bl.order[p]); if (idx >= 0) { at = idx + 1; break; } }
+        words.splice(at, 0, {hw, empty: '写真で見出し語の位置が分からなかったため、意味が入っていません'}); wl.splice(at, 0, []);
+      }
+      st = words.map(w => { const b = baseOf(w.hw); return {b, s: stemOf(b)}; });
+    }
     const en = fixEn(u.en, noteS);
-    if (u.cf.reduce((a, x) => a + x, 0) / u.cf.length < 70) noteS('英文の読み取りの確度が低いので、本と見比べてください');
-    if (rR.slice(ts, te + 1).some(r => r.cf < 60)) noteS('和訳の読み取りの確度が低いので、本と見比べてください');
+    if (!blk && u.cf.reduce((a, v) => a + v, 0) / u.cf.length < 70) noteS('英文の読み取りの確度が低いので、本と見比べてください');
+    if (!u.jaLT && jaRows.some(r => r.cf < 60)) noteS('和訳の読み取りの確度が低いので、本と見比べてください');
     out.push({en, ja, chk: chkS, words: words.map((w, j) => {
-      const rs = mean.slice(bd[j], bd[j + 1]), L = rs.map(r => r.t);
-      const A = L.map((x, i) => i > 0 && cont(L[i - 1], x, st) ? -1 : anchorOf(x, st));
-      const M = buildWord(j, L, A, st);
-      if (rs.some(r => r.cf < 60)) M.chk.push('読み取りの確度が低い行があります。本と見比べてください');
+      const rs = wl[j] || [], L = rs.map(r => r.t);
+      const A = L.map((t, i) => i > 0 && cont(L[i - 1], t, st) ? -1 : anchorOf(t, st));
+      const M = w.empty ? {ja: '', p: '', chk: [w.empty]} : buildWord(j, L, A, st);
+      if (rs.some(r => r.cf != null && r.cf < 60)) M.chk.push('読み取りの確度が低い行があります。本と見比べてください');
       if (rs.some(r => r.posBad)) M.chk.push('品詞の記号が読み取れなかった行があります');
+      if (rs.some(r => r.fb)) M.chk.push('文章に無かった行を写真の読み取りで補いました。本と見比べてください');
       return {hw: w.hw, ja: M.ja, p: M.p, chk: M.chk};
     })});
   });
+  const ltInfo = LT ? ` 文章の行${ltCand}行中${ltHit}行を写真の行に対応づけました` : '';
   const tag = c => used.has(c) ? '文' : c.x0 >= DIV ? '右' : '左';
-  raw.push(`幅${W} 境目${Math.round(DIV)} 行の高さ${Math.round(lh)} 傾き${slope.toFixed(3)} 例文${units.length}件 和訳と単語がそろったもの${out.length}件`);
-  units.forEach((u, k) => raw.push(`英文${k + 1}：${u.en}`));
+  raw.push(`幅${W} 境目${Math.round(DIV)} 行の高さ${Math.round(lh)} 傾き${slope.toFixed(3)} 例文${units.length}件 和訳と単語がそろったもの${out.length}件${ltInfo}`);
+  out.forEach((x, k) => raw.push(`英文${k + 1}：${x.en}`));
   for (const c of CH.slice().sort((a, b) => a.y - b.y)) raw.push(`${tag(c)} ${Math.round(c.x0)},${Math.round(c.y)} ${c.t}`);
   for (const c of LcE.slice().sort((a, b) => a.y - b.y)) raw.push(`左E ${Math.round(c.x0)},${Math.round(c.y)} ${c.t}`);
+  for (const c of RJ.slice().sort((a, b) => a.y - b.y)) raw.push(`右J ${Math.round(c.x0)},${Math.round(c.y)} ${c.t}`);
   return {out, skipped, rects, raw: raw.join('\n')};
 }
-// 読み直す範囲を切り出す（あとで位置を元の写真に戻すため、切り出した位置を覚えておく）
-function cropCv(cv, rc) { const c = document.createElement('canvas'); c.width = rc.w; c.height = rc.h; c.getContext('2d').drawImage(cv, rc.x, rc.y, rc.w, rc.h, 0, 0, rc.w, rc.h); c.__ox = rc.x; c.__oy = rc.y; return c; }
-function shiftLines(data, dx, dy) {
-  return ocrLines(data).map(l => ({words: (l.words && l.words.length ? l.words : [l]).filter(w => w && w.bbox).map(w => ({text: w.text, confidence: w.confidence, bbox: {x0: w.bbox.x0 + dx, y0: w.bbox.y0 + dy, x1: w.bbox.x1 + dx, y1: w.bbox.y1 + dy}}))}));
+// テキスト認識でコピーした文章を、例文ごとに区切る（例文の行から、次の例文の行の前まで）
+function ltBlocks(text) {
+  const L = String(text).replace(/\r\n?/g, '\n').split('\n').map(x => x.replace(/^[\s　|•・]+|[\s　]+$/g, '')).filter(x => x && !NUMLN.test(x));
+  const blocks = []; let cur = null;
+  for (let k = 0; k < L.length; k++) {
+    if ((!cur || cur.hasJa) && isSentStart(L, k)) { cur = {L: [], hasJa: false}; blocks.push(cur); }
+    if (!cur) continue;
+    cur.L.push(L[k]);
+    if (JPRE.test(L[k]) && /。[」』]?$/.test(L[k])) cur.hasJa = true;
+  }
+  for (const b of blocks) { let en = b.L[0], i = 1; while (i < b.L.length && i <= 3 && !/[.?!"”’]$/.test(en) && enOnly(b.L[i]) && /^[a-z]/.test(b.L[i]) && (/[.?!"”’]$/.test(b.L[i]) || /,$/.test(en))) en += ' ' + b.L[i++]; b.en = en; b.i1 = i; }
+  return blocks;
 }
-async function photoImport(files) {
-  if (OCRBUSY) { alert('写真を読み取っている途中です。終わるまでお待ちください。'); return; }
-  if (!UI.ocr && !confirm('写真の文字を、この端末の中で読み取ります（写真は外に送られません）。\n初回は文字認識の部品とデータ（十数MB）をダウンロードするため時間がかかります。続けますか？')) return;
-  const sec = DSEC, all = [], skipped = [], raws = [], pages = [];
-  let worker = null, cur = '写真', phase = 1;
+// 写真を読み取る：1回目は全体を日本語と英語で（段の配置を自動で判定）→ 右の段（意味）を切り出して読み直す →
+// 2回目は例文と左の段（見出し語）を英語専用の設定で読み直す
+async function ocrPages(files) {
+  const T = await loadTess(), pages = [];
+  let worker = null, cur = '写真', step = '';
   const logger = m => {
     const v = m.progress || 0, st = String(m.status || '');
-    if (st.indexOf('recogniz') >= 0) prog(true, phase === 1 ? `${cur}を読み取っています… ${Math.round(v * 100)}%` : `${cur}の英文と見出し語を読み直しています…`, v);
+    if (st.indexOf('recogniz') >= 0) prog(true, `${cur}${step}… ${Math.round(v * 100)}%`, v);
     else if (st.indexOf('traineddata') >= 0) prog(true, '認識用のデータを読み込んでいます（初回は時間がかかります）…', v);
     else prog(true, '文字認識を準備しています…', v);
   };
-  OCRBUSY = true; prog(true, '文字認識を準備しています…', 0);
+  const rec = async (img, psm) => { await worker.setParameters({tessedit_pageseg_mode: psm}); const r = await worker.recognize(img, {}, {blocks: true, text: true}); return (r && r.data) || {}; };
   try {
-    const T = await loadTess();
-    // 1回目：写真全体を日本語と英語で読み取る
     worker = await T.createWorker('jpn+eng', 1, {logger});
     UI.ocr = 1; store(K.u, UI);
     for (let i = 0; i < files.length; i++) {
       cur = files.length > 1 ? `${i + 1}/${files.length}枚目` : '写真';
-      prog(true, `${cur}を読み取っています…`, 0);
-      const cv = prepImg(await loadImg(files[i]));
-      const r = await worker.recognize(cv, {}, {blocks: true, text: true});
-      const d1 = (r && r.data) || {}, pre = photoParse(d1, cv.width, cv.height);
-      pages.push({d1, W: cv.width, H: cv.height, crops: pre.rects.map(rc => ({rc, cv: cropCv(cv, rc)})), eng: []});
+      step = 'を読み取っています'; prog(true, cur + step + '…', 0);
+      const im = await loadImg(files[i]), cv = prepImg(im);
+      const d1 = await rec(cv, '3'), pre = photoParse(d1, cv.width, cv.height);
+      const pg = {d1, W: cv.width, H: cv.height, rj: [], eng: [], crops: []};
+      for (const rc of pre.rects) {
+        const c = cropImg(im, cv.__k, rc);
+        if (rc.kind === 'right') { step = 'の意味の段を読み直しています'; prog(true, cur + step + '…', 0); pg.rj.push({unit: rc.unit, lines: shiftLines(await rec(c, '4'), c.__ox, c.__oy, c.__m)}); }
+        else pg.crops.push({rc, c});
+      }
+      pages.push(pg);
     }
     await Promise.resolve(worker.terminate()); worker = null;
-    // 2回目：例文と左の段（見出し語）を、英語専用の設定で読み直す
     if (pages.some(p => p.crops.length)) {
-      phase = 2;
       worker = await T.createWorker('eng', 1, {logger});
       for (let i = 0; i < pages.length; i++) {
-        cur = pages.length > 1 ? `${i + 1}/${pages.length}枚目` : '写真';
-        for (const c of pages[i].crops) {
-          prog(true, `${cur}の英文と見出し語を読み直しています…`, 0);
-          const r = await worker.recognize(c.cv, {}, {blocks: true, text: true});
-          pages[i].eng.push({kind: c.rc.kind, unit: c.rc.unit, lines: shiftLines((r && r.data) || {}, c.rc.x, c.rc.y)});
-          c.cv = null;
-        }
+        cur = pages.length > 1 ? `${i + 1}/${pages.length}枚目` : '写真'; step = 'の英文と見出し語を読み直しています';
+        for (const {rc, c} of pages[i].crops) { prog(true, cur + step + '…', 0); pages[i].eng.push({kind: rc.kind, unit: rc.unit, lines: shiftLines(await rec(c, rc.kind === 'sent' ? '6' : '11'), c.__ox, c.__oy, c.__m)}); }
+        pages[i].crops = [];
       }
       await Promise.resolve(worker.terminate()); worker = null;
     }
-    pages.forEach((p, i) => { const res = photoParse(p.d1, p.W, p.H, p.eng); all.push(...res.out); skipped.push(...res.skipped); raws.push(`【${i + 1}枚目】\n` + res.raw); });
-  } catch (e) {
-    OCRBUSY = false; prog(false);
-    if (worker) Promise.resolve(worker.terminate()).catch(() => {});
-    alert(e && e.message === 'load' ? '文字認識の部品を読み込めませんでした。電波のある所でもう一度試してください。' : '写真を読み取れませんでした。\n理由：' + String((e && (e.message || e)) || '不明'));
-    return;
-  }
-  OCRBUSY = false; prog(false); RAW = raws.join('\n');
-  if (!all.length) { if (VIEW === 'data') keepScroll(vData); alert('写真から英文と和訳を見つけられませんでした。ページを平らにして真上から、1ページずつ撮った写真で試してください。\n読み取れた文字は「写真から読み取った文字（確認用）」で見られます。'); return; }
+    return pages;
+  } catch (e) { if (worker) Promise.resolve(worker.terminate()).catch(() => {}); throw e; }
+}
+function ocrErr(e) { return e && e.message === 'load' ? '文字認識の部品を読み込めませんでした。電波のある所でもう一度試してください。' : '写真を読み取れませんでした。\n理由：' + String((e && (e.message || e)) || '不明'); }
+function ocrOk() {
+  if (OCRBUSY) { alert('写真を読み取っている途中です。終わるまでお待ちください。'); return false; }
+  return !!UI.ocr || confirm('写真の文字を、この端末の中で読み取ります（写真は外に送られません）。\n初回は文字認識の部品とデータ（十数MB）をダウンロードするため時間がかかります。続けますか？');
+}
+// 「写真から読み取る」：写真だけで取り込む
+async function photoImport(files) {
+  if (!ocrOk()) return;
+  const sec = DSEC, all = [], skipped = [], raws = [];
+  OCRBUSY = true; prog(true, '文字認識を準備しています…', 0);
+  try {
+    const pages = await ocrPages(files);
+    pages.forEach((p, i) => { const res = photoParse(p.d1, p.W, p.H, {eng: p.eng, rj: p.rj}); all.push(...res.out); skipped.push(...res.skipped); raws.push(`【${i + 1}枚目】\n` + res.raw); });
+  } catch (e) { alert(ocrErr(e)); return; }
+  finally { OCRBUSY = false; prog(false); }
+  RAW = raws.join('\n');
+  if (!all.length) { if (VIEW === 'data') keepScroll(vData); alert('写真から英文と和訳を見つけられませんでした。ページを平らにして真上から撮った写真で試してください。\n読み取れた文字は「写真から読み取った文字（確認用）」で見られます。'); return; }
   importBlocks(all, skipped, sec);
+}
+// 「まとめて貼り付け」＋「写真も使う」：文字はテキスト認識の文章、単語への振り分けは写真の位置で行う
+async function hybridImport() {
+  const text = $('#btxt').value, file = BPH;
+  if (!text.trim()) { alert('テキスト認識でコピーした文章を貼り付けてください。'); return; }
+  if (!ocrOk()) return;
+  const sec = DSEC;
+  let res = null;
+  OCRBUSY = true; prog(true, '文字認識を準備しています…', 0);
+  try { const p = (await ocrPages([file]))[0]; res = photoParse(p.d1, p.W, p.H, {eng: p.eng, rj: p.rj, lt: text}); }
+  catch (e) { alert(ocrErr(e)); return; }
+  finally { OCRBUSY = false; prog(false); }
+  RAW = '【写真と文章】\n' + res.raw;
+  BPH = null;
+  if (res.out.length) { importBlocks(res.out, res.skipped, sec); return; }
+  // 写真から例文の位置が分からなかった時は、文章だけで取り込む
+  const r2 = ocrParse(text);
+  if (!r2.out.length) { if (VIEW === 'data') keepScroll(vData); alert('英文と和訳を読み取れませんでした。英文の番号から和訳までが入るようにコピーしてください。'); return; }
+  importBlocks(r2.out, r2.skipped, sec, '写真から例文の位置が分からなかったため、文章だけで取り込みました。');
+}
+function bphShow() {
+  const n = document.getElementById('bphn'), x = document.getElementById('bphx'); if (!n) return;
+  n.textContent = BPH ? `写真：${BPH.name}` : '同じページの写真も選ぶと、単語への振り分けが正確になります';
+  if (x) x.hidden = !BPH;
 }
 
 /* ===== 確認が必要なところ：取り込み時の記録（chk）と、今の内容から分かるもの ===== */
@@ -1263,7 +1444,8 @@ function onClick(e) {
     case 'addS': addS(); break;
     case 'bulk': $('#bulk').hidden = false; $('#btxt').focus(); break;
     case 'bclose': $('#bulk').hidden = true; break;
-    case 'bimp': bulkImport(); break;
+    case 'bimp': if (BPH) hybridImport(); else bulkImport(); break;
+    case 'bphx': BPH = null; bphShow(); break;
     case 'ackW': case 'ackS': ackItem(d.id); break;
     case 'openChk': openChk(); break;
     case 'addW': addW(d.id); break;
@@ -1285,6 +1467,7 @@ function onChange(e) {
   if (t.dataset && t.dataset.f) onInput(e);
   else if (t.id === 'ra' || t.id === 'rb') { UI[t.id === 'ra' ? 'a' : 'b'] = +t.value; store(K.u, UI); vHome(); }
   else if (t.id === 'dsec') pickSec(+t.value);
+  else if (t.id === 'bphf' && t.files && t.files[0]) { BPH = t.files[0]; t.value = ''; bphShow(); }
   else if (t.id === 'phf' && t.files && t.files.length) { const fs = [...t.files]; t.value = ''; photoImport(fs); }
   else if (t.id === 'impf' && t.files && t.files[0]) { const f = t.files[0]; t.value = ''; importData(f); }
 }
