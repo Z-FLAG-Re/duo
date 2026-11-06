@@ -178,7 +178,7 @@ label.btn{position:relative;display:flex;align-items:center;justify-content:cent
 /* ===== 保存（この端末のブラウザ内だけ） ===== */
 const K = {d: 'duoApp:data', p: 'duoApp:prog', u: 'duoApp:ui'};
 const NSEC = 45;
-const APP_VER = '2026-11-06 12:30';   // 更新するたびに変える
+const APP_VER = '2026-11-06 12:45';   // 更新するたびに変える
 function load(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } }
 function store(k, v) {
   try { localStorage.setItem(k, JSON.stringify(v)); return true; }
@@ -959,10 +959,32 @@ function fixEn(en, note) {
 function enOnly(x) { return !JPRE.test(x) && /[A-Za-z]/.test(x); }
 function nWords(x) { return (x.match(/[A-Za-z]+/g) || []).length; }
 // 例文の始まり（大文字で始まる英語だけの行。短い行は次の行に小文字で続くもの）
+// ── 例文と和訳の範囲の決まり（1文・複数の文・会話・行の折り返しに共通。写真・文章・写真＋文章のどれでも使う）
+// 英文の行らしいか（単語がほとんどで、大文字だらけでない）
+function sentLike(t) {
+  const tk = String(t).split(/\s+/).filter(x => /[A-Za-z]/.test(x)), L = (String(t).match(/[A-Za-z]/g) || []).length, U = (String(t).match(/[A-Z]/g) || []).length;
+  return tk.length >= 1 && L >= 4 && U <= Math.max(2, L * 0.3) && tk.filter(x => /^[("“‘']?[A-Za-z][a-z'’\-]*[.,;:!?"”’)…]*$/.test(x)).length >= tk.length * 0.7;
+}
+const SENTEND = /[.?!]["”’]?$/, NEWSENT = /^["“‘]?\s*[A-Z]/;
+// 写真の帯の中の次の行も例文か：文の途中なら続き。文の終わりの後は、大文字か引用符で始まる英文の行（次の文・会話の次の発言）
+function bandNext(prev, t) { return !SENTEND.test(prev) || (NEWSENT.test(t) && sentLike(t)); }
+// 文章（テキスト認識）の次の行も例文か：上と同じ決まりで、例文の中にある語句の行（見出し語）と、短い1語だけの行は除く
+function sentNext(en, x) {
+  if (!enOnly(x) || PRON.test(x) || LTPRON.test(x) || !sentLike(x)) return false;
+  if (locate(en, cleanHw(x.replace(/^\d+\s*/, '')))) return false;
+  const q = /^["“‘]/.test(x), n = nWords(x);
+  if (SENTEND.test(en)) return NEWSENT.test(x) && (q || n >= 3);     // 次の文・会話の次の発言
+  return /[.?!"”’]$/.test(x) || /,$/.test(en) || n >= 3;              // 文の続き
+}
+// 和訳の終わりの行（「。」「！」「？」や、会話の「」」で終わる）と、和訳の行らしいか（日本語だけで、品詞・丸数字・英語・括弧の説明などが無い）
+// （CD・TV などの大文字の略語は和訳にもあるので除かない。loose なら日本語だけの（ ）も和訳の行とみなす）
+function trLike(x, loose) { return JPRE.test(x) && !posOf(x) && !/[a-z]{2}/.test(x) && !/[①-⑳［］\[\]【】〔〕《》〈〉]/.test(x) && (loose ? !/[（(][^）)]*[A-Za-z]{2}/.test(x) : !/[（）()]/.test(x)); }
+function trEnd(x) { return JPRE.test(x) && (/[。！？!?][」』]?$/.test(x) || (/[」』]$/.test(x) && trLike(x))); }   // 発音の行（…（ホーウ）」など）は除く
 function isSentStart(L, k) {
   const x = L[k];
   if (!enOnly(x) || !/^["“‘'(]?[A-Z]/.test(x) || /[\/\[\]［］]/.test(x)) return false;
   if (nWords(x) >= 4) return true;
+  if (/^["“‘]/.test(x) && /[.?!,]["”’]$/.test(x) && nWords(x) >= 2) return true;   // 会話の短い発言（"Hurry up!" など）
   let j = k + 1; while (j < L.length && NUMLN.test(L[j])) j++;
   return nWords(x) >= 2 && j < L.length && enOnly(L[j]) && /^[a-z]/.test(L[j]);
 }
@@ -981,16 +1003,16 @@ function ocrParse(text) {
     if ((!cur || cur.ja) && isSentStart(L, k)) { cur = {L: [], ja: false}; blocks.push(cur); }
     if (!cur) continue;
     cur.L.push(L[k]);
-    if (JPRE.test(L[k]) && /。[」』]?$/.test(L[k])) cur.ja = true;
+    if (trEnd(L[k])) cur.ja = true;
   }
   for (const bk of blocks) {
     const B = bk.L; let en = B[0], i = 1;
-    while (i < B.length && i <= 3 && enOnly(B[i]) && ((!/[.?!"”’]$/.test(en) && /^[a-z]/.test(B[i]) && (/[.?!"”’]$/.test(B[i]) || /,$/.test(en))) || (DLG.test(en) && /^["“‘]\s*[A-Z]/.test(B[i])))) en += ' ' + B[i++];   // 会話の次の発言も続ける
+    while (i < B.length && i <= 4 && sentNext(en, B[i])) en += ' ' + B[i++];
     const chkS = [], noteS = x => { if (!chkS.includes(x)) chkS.push(x); };
     en = fixEn(en, noteS);
-    let te = -1; for (let k = B.length - 1; k >= i; k--) if (JPRE.test(B[k]) && /。[」』]?$/.test(B[k])) { te = k; break; }
+    let te = -1; for (let k = B.length - 1; k >= i; k--) if (trEnd(B[k])) { te = k; break; }
     if (te < 0) { skipped.push(en.slice(0, 16)); continue; }
-    let ts = te; while (ts - 1 >= i && te - ts < 2 && plainJa(B[ts - 1])) ts--;
+    let ts = te; while (ts - 1 >= i && te - ts < 2 && (plainJa(B[ts - 1]) || trLike(B[ts - 1]))) ts--;
     { const qn = (x, c) => (x.match(new RegExp(c, 'g')) || []).length;   // 閉じの」が多い間は上の行も和訳（会話の和訳）
       while (ts - 1 >= i && qn(B.slice(ts, te + 1).join(''), '」') > qn(B.slice(ts, te + 1).join(''), '「') && JPRE.test(B[ts - 1]) && !posOf(B[ts - 1]) && !/[A-Za-z]{2}/.test(B[ts - 1])) ts--; }
     const ja = B.slice(ts, te + 1).join(''), body = B.slice(i, ts);
@@ -1457,7 +1479,8 @@ function pageScan(data, W, H, ex) {
   for (const b of bands) {
     const cs = CH.filter(c => inBand(c) === b).sort((a, c) => a.y - c.y), es = cs.filter(c => enN(c.t) >= 2 && jaN(c.t) <= 3);
     cs.forEach(c => used.add(c));
-    const ee = []; for (const c of es) { const t = enText(c.t); if (ee.length && /[.?!]["”’]?$/.test(ee[ee.length - 1]) && !(DLG.test(ee[ee.length - 1]) && /^["“‘]/.test(t))) break; ee.push(t); }
+    const rb = []; for (const c of es) { const r = rb[rb.length - 1]; if (r && Math.abs(c.y - r[0].y) < lh * 0.5) r.push(c); else rb.push([c]); }
+    const ee = []; for (const r of rb) { const t = r.sort((a, c) => a.x0 - c.x0).map(c => enText(c.t)).join(' '); if (ee.length && !bandNext(ee[ee.length - 1], t)) break; ee.push(t); }
     units.push({en: ee.join(' ').replace(/\s+/g, ' ').trim(), x0: es.length ? Math.min(...es.map(c => c.x0)) : 0, top: Math.min(cy(b.y0), ...cs.map(c => c.y0)), lastY: es.length ? es[es.length - 1].y : cy(b.y1),
       bot: Math.max(cy(b.y1), ...cs.map(c => c.y1)), ry0: Math.min(b.y0, ...cs.map(c => c.ry0)), ry1: Math.max(b.y1, ...cs.map(c => c.ry1)), cf: es.length ? es.map(c => c.cf) : [0], band: 1});
   }
@@ -1565,7 +1588,7 @@ function pageScan(data, W, H, ex) {
     const parts = [], cf = [];
     for (let ws of rowsS) {
       ws.sort((a, b) => a.x0 - b.x0);
-      if (parts.length && /[.?!]["”’]?$/.test(parts[parts.length - 1]) && !(DLG.test(parts[parts.length - 1]) && /^["“‘]/.test(ws[0].t))) break;   // 文の終わりの後（帯の中の別の行）。会話の次の発言は続ける
+      if (parts.length && !bandNext(parts[parts.length - 1], enText(joinWords(ws)))) break;   // 文の終わりの後の、英文でない行（帯の中の別の読み取り）
       while (ws.length > 1 && ws[0].t.length <= 2 && ws[1].x0 - ws[0].x1 > lh * 0.8) ws = ws.slice(1);                  // 帯の左の太線などの読み取り
       while (ws.length > 1 && ws[ws.length - 1].x0 - ws[ws.length - 2].x1 > lh * 1.5) ws = ws.slice(0, -1);             // 右に離れた読み取り（隣のページなど）
       const t = enText(joinWords(ws));
@@ -1671,7 +1694,7 @@ function buildPhoto(pages, lt) {
     const missing = [];
     if (blk) {
       const L = blk.L, usedL = new Set(); for (let i = 0; i < blk.i1; i++) usedL.add(i);
-      let tb = -1; for (let i = L.length - 1; i >= blk.i1; i--) if (JPRE.test(L[i]) && /。[」』]?$/.test(L[i])) { tb = i; break; }
+      let tb = -1; for (let i = L.length - 1; i >= blk.i1; i--) if (trEnd(L[i])) { tb = i; break; }
       const pj0 = te < rR.length ? ja : '';
       if ((tb < 0 || /^[A-Za-zÀ-ɏ]/.test(L[tb])) && pj0 && JPRE.test(pj0)) {
         // 和訳の始まりは行の途中のこともある（テキスト認識が、すぐ上の派生語の行とつなげてしまう）。
@@ -1697,8 +1720,8 @@ function buildPhoto(pages, lt) {
         let t0 = tb;
         // 和訳の行数：写真で和訳が見つかっていれば、それに一番近くなる行数（前の意味の行を和訳に含めないように）
         const pj = te < rR.length ? ja : '';
-        if (pj && JPRE.test(pj)) { let bv = -1; for (let a = tb; a >= Math.max(blk.i1, tb - 2); a--) { if (a < tb && !plainJa(L[a])) break; const v = dice(bigr(L.slice(a, tb + 1).join('')), bigr(pj)); if (v > bv + 0.02) { bv = v; t0 = a; } } }
-        else while (t0 - 1 >= blk.i1 && tb - t0 < 2 && plainJa(L[t0 - 1])) t0--;
+        if (pj && JPRE.test(pj)) { let bv = -1; for (let a = tb; a >= Math.max(blk.i1, tb - 3); a--) { if (a < tb && !plainJa(L[a]) && !trLike(L[a], true)) break; const v = dice(bigr(L.slice(a, tb + 1).join('')), bigr(pj)); if (v > bv + 0.02) { bv = v; t0 = a; } } }
+        else while (t0 - 1 >= blk.i1 && tb - t0 < 2 && (plainJa(L[t0 - 1]) || trLike(L[t0 - 1]))) t0--;
         const qn = (x, c) => (x.match(new RegExp(c, 'g')) || []).length;
         while (t0 - 1 >= blk.i1 && qn(L.slice(t0, tb + 1).join(''), '」') > qn(L.slice(t0, tb + 1).join(''), '「') && JPRE.test(L[t0 - 1]) && !posOf(L[t0 - 1]) && !/[A-Za-z]{2}/.test(L[t0 - 1])) t0--;
         ja = L.slice(t0, tb + 1).join(''); u.jaLT = true; for (let i = t0; i <= tb; i++) usedL.add(i);
@@ -1886,11 +1909,11 @@ function ltBlocks(text) {
     if ((!cur || cur.hasJa) && isSentStart(L, k)) { cur = {L: [], hasJa: false}; blocks.push(cur); }
     if (!cur) continue;
     cur.L.push(L[k]);
-    if (JPRE.test(L[k]) && /。[」』]?$/.test(L[k])) cur.hasJa = true;
+    if (trEnd(L[k])) cur.hasJa = true;
   }
   for (const b of blocks) {
     let en = b.L[0], i = 1;
-    while (i < b.L.length && i <= 3 && enOnly(b.L[i]) && ((!/[.?!"”’]$/.test(en) && /^[a-z]/.test(b.L[i]) && (/[.?!"”’]$/.test(b.L[i]) || /,$/.test(en))) || (DLG.test(en) && /^["“‘]\s*[A-Z]/.test(b.L[i])))) en += ' ' + b.L[i++];   // 会話の次の発言（引用符で始まる行）も続ける
+    while (i < b.L.length && i <= 4 && sentNext(en, b.L[i])) en += ' ' + b.L[i++];
     b.en = en; b.i1 = i;
   }
   return blocks;
