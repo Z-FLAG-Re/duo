@@ -178,7 +178,7 @@ label.btn{position:relative;display:flex;align-items:center;justify-content:cent
 /* ===== 保存（この端末のブラウザ内だけ） ===== */
 const K = {d: 'duoApp:data', p: 'duoApp:prog', u: 'duoApp:ui'};
 const NSEC = 45;
-const APP_VER = '2026-11-06 11:40';   // 更新するたびに変える
+const APP_VER = '2026-11-06 12:30';   // 更新するたびに変える
 function load(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } }
 function store(k, v) {
   try { localStorage.setItem(k, JSON.stringify(v)); return true; }
@@ -635,6 +635,7 @@ const JUNK = /^[\s　□口|｜・•]+/;                                       
 const DASH = /^[━ーｰ\-－—―一]+\s*/;                                             // 「━」＝同じ単語の別の品詞
 const LTPRON = /^[\[［L(（|]?\s*[A-Za-zÀ-ɏəʃʒæŋɔʌθðɪʊː:'’ˈˌ\-0-9 ]{2,}\s*[（(](?=[^）)]*[ァ-ヶ0-9])[^）)]{1,24}[）)]\s*[\]］」』〕|1lI]?$/;   // 文章（テキスト認識）の発音の行
 const PRON = /^[^ぁ-んァ-ヶ一-龠々]*[A-Za-z][^ぁ-んァ-ヶ一-龠々]*[（(](?=[^）)]*[ァ-ヶ])[ァ-ヶぁ-んー・\s\[\]［］\/\-－]+[）)][\]］」』〕]?$/; // 発音
+const DLG = /[.?!,]\s*["”’]$/;                                                    // 会話の発言の終わり（"…?" など）
 const STOPW = new Set('of to in on at for the a an and or but with by from as into about'.split(' '));
 const NUMLN = /^[0-9０-９]{1,3}$/;                                              // 見出しの番号・ページ番号
 function kindOf(hw) { return /\s/.test(phNorm(hw).replace(/\([^)]*\)/g, ' ').replace(/…/g, ' ').replace(/\s+/g, ' ').trim()) ? 'i' : 'w'; }
@@ -772,7 +773,7 @@ function bare(p, st) {
   return (anchorOf(p, st) >= 0 || enShort(p)) && /^[名動形副前接助感構頭尾代定图図#]?$/.test(t.replace(/[A-Za-zÀ-ɏ'’\-.…\s()（）\[\]［］~～]/g, ''));
 }
 // x が前の行 p の続きか（括弧の途中、閉じ括弧や②以降で始まる、英語の折り返し、品詞や派生語だけの行の次）
-function cont(p, x, st) { if (!opened(p) && relLine(x)) return false; return opened(p) || /^[）)\]］】〕」』②-⑳]/.test(x) || (/[A-Za-z0-9\/\-]$/.test(p) && /^[a-z]/.test(x)) || bare(p, st); }
+function cont(p, x, st) { if (relLine(x) && (!opened(p) || !/^[^（(［\[【〔]*[）)\]］】〕]/.test(x))) return false; return opened(p) || /^[）)\]］】〕」』②-⑳]/.test(x) || (/[A-Za-z0-9\/\-]$/.test(p) && /^[a-z]/.test(x)) || bare(p, st); }
 function joinL(L) { return L.reduce((a, x) => a + (a && /[A-Za-z0-9]$/.test(a) && /^[A-Za-z]/.test(x) ? ' ' : '') + x, ''); }
 // 派生語の行の先頭から「単語」と品詞を取り出す
 function splitHead(t, s, b) {
@@ -805,7 +806,8 @@ function normT(t) {
     .replace(/…[.,](?=\s*[ぁ-んァ-ヶ一-龠々（(])/g, '…，')
     .replace(/([ぁ-んァ-ヶ一-龠々])\.(?![A-Za-z])/g, '$1…')
     .replace(/([ぁ-んァ-ヶ一-龠々）)])\s*,\s*(?=[ぁ-んァ-ヶ一-龠々（(…])/g, '$1，').replace(/…{2,}/g, '…')
-    .replace(/。(?=\s*[…ぁ-んァ-ヶ一-龠々（(［\[〔])/g, '，');   // 意味の途中の「。」は「，」の読み違い
+    .replace(/。(?=\s*[…ぁ-んァ-ヶ一-龠々（(［\[〔])/g, '，')   // 意味の途中の「。」は「，」の読み違い
+    .replace(/([①-⑳])\s*[.．]+(?=\s*[…ぁ-んァ-ヶ一-龠々（(])/g, '$1…').replace(/…{2,}/g, '…');   // 丸数字のすぐ後の「.」は「…」の読み違い
 }
 // 「い」が英字の U に読み取られたもの（新しU (unique → 新しい）を直す
 function fixI(t, note) { return t.replace(/([ぁ-ん])\s*[UuＵ](?=\s*[（(]|\s*$)/g, (m0, a) => { note('「い」が英字の U に読み取られていたところを直しました'); return a + 'い'; }); }
@@ -832,7 +834,7 @@ function jparts(t, note) {
     if (!y || y.length < 3 || (!/[一-龠々]/.test(y) && y.length < 4) || /^ー/.test(y) || (y.match(/ー/g) || []).length * 3 > y.length) break;   // 罫線が「ーーー」に読まれたものなどは除く
     out.push(y); note('番号が読み取れなかった意味を、次の番号の意味として入れました。本と見比べてください'); x = y; i = k + j;
   }
-  return out;
+  return out.map(y => y.replace(/^を/, '…を'));   // 「を」で始まる意味は前の「…」が読めなかったもの（…を実現する）
 }
 function jphraseAt(t, note) {
   note = note || (() => {});
@@ -983,19 +985,21 @@ function ocrParse(text) {
   }
   for (const bk of blocks) {
     const B = bk.L; let en = B[0], i = 1;
-    while (i < B.length && i <= 3 && !/[.?!"”’]$/.test(en) && enOnly(B[i]) && /^[a-z]/.test(B[i]) && (/[.?!"”’]$/.test(B[i]) || /,$/.test(en))) en += ' ' + B[i++];
+    while (i < B.length && i <= 3 && enOnly(B[i]) && ((!/[.?!"”’]$/.test(en) && /^[a-z]/.test(B[i]) && (/[.?!"”’]$/.test(B[i]) || /,$/.test(en))) || (DLG.test(en) && /^["“‘]\s*[A-Z]/.test(B[i])))) en += ' ' + B[i++];   // 会話の次の発言も続ける
     const chkS = [], noteS = x => { if (!chkS.includes(x)) chkS.push(x); };
     en = fixEn(en, noteS);
     let te = -1; for (let k = B.length - 1; k >= i; k--) if (JPRE.test(B[k]) && /。[」』]?$/.test(B[k])) { te = k; break; }
     if (te < 0) { skipped.push(en.slice(0, 16)); continue; }
     let ts = te; while (ts - 1 >= i && te - ts < 2 && plainJa(B[ts - 1])) ts--;
+    { const qn = (x, c) => (x.match(new RegExp(c, 'g')) || []).length;   // 閉じの」が多い間は上の行も和訳（会話の和訳）
+      while (ts - 1 >= i && qn(B.slice(ts, te + 1).join(''), '」') > qn(B.slice(ts, te + 1).join(''), '「') && JPRE.test(B[ts - 1]) && !posOf(B[ts - 1]) && !/[A-Za-z]{2}/.test(B[ts - 1])) ts--; }
     const ja = B.slice(ts, te + 1).join(''), body = B.slice(i, ts);
     const seen = new Set(), words = [], S = [];
     for (let k = 0; k < body.length; k++) {
       const x = body[k];
       if (PRON.test(x)) continue;
       const c0 = cleanRow(x.replace(/^\d+\s*/, ''));
-      if (HWRE.test(c0) && /[A-Za-z]/.test(c0)) {
+      if (HWRE.test(c0) && /[A-Za-z]/.test(c0) && !(k > 0 && opened(body[k - 1]) && /^[（(［\[【〔]|[）)\]］】〕]/.test(c0))) {   // 前の行の括弧の続き（(move)】 など）は見出し語ではない
         let hw = cleanHw(c0), merged = false;
         const nx = (body[k + 1] || '').replace(/^\d+\s*/, '');
         // 2行に分かれた見出し語（regardless / of …）をつなぐ
@@ -1453,7 +1457,7 @@ function pageScan(data, W, H, ex) {
   for (const b of bands) {
     const cs = CH.filter(c => inBand(c) === b).sort((a, c) => a.y - c.y), es = cs.filter(c => enN(c.t) >= 2 && jaN(c.t) <= 3);
     cs.forEach(c => used.add(c));
-    const ee = []; for (const c of es) { if (ee.length && /[.?!]["”’]?$/.test(ee[ee.length - 1])) break; ee.push(enText(c.t)); }
+    const ee = []; for (const c of es) { const t = enText(c.t); if (ee.length && /[.?!]["”’]?$/.test(ee[ee.length - 1]) && !(DLG.test(ee[ee.length - 1]) && /^["“‘]/.test(t))) break; ee.push(t); }
     units.push({en: ee.join(' ').replace(/\s+/g, ' ').trim(), x0: es.length ? Math.min(...es.map(c => c.x0)) : 0, top: Math.min(cy(b.y0), ...cs.map(c => c.y0)), lastY: es.length ? es[es.length - 1].y : cy(b.y1),
       bot: Math.max(cy(b.y1), ...cs.map(c => c.y1)), ry0: Math.min(b.y0, ...cs.map(c => c.ry0)), ry1: Math.max(b.y1, ...cs.map(c => c.ry1)), cf: es.length ? es.map(c => c.cf) : [0], band: 1});
   }
@@ -1555,13 +1559,13 @@ function pageScan(data, W, H, ex) {
   const LcE = chunks(E.filter(e => e.kind === 'left').flatMap(e => e.lines).map(wordsOf).map(undot)).filter(c => c.x0 < DIV);
   const LrowsE = rows(LcE);
   const engSent = k => {
-    const ls = E.filter(e => e.kind === 'sent' && e.unit === k).flatMap(e => e.lines).map(wordsOf).map(undot).filter(ws => ws.length).sort((a, b) => yc(a[0]) - yc(b[0]));
+    const ls = E.filter(e => e.kind === 'sent' && e.unit === k).flatMap(e => e.lines).map(wordsOf).map(ws => ws.filter((w, q, a) => /^[I|]$/.test(w.t) && q > 0 && q < a.length - 1 || undot([w]).length).map((w, q, a) => w.t === '|' && q > 0 && q < a.length - 1 ? Object.assign({}, w, {t: 'I'}) : w)).filter(ws => ws.length).sort((a, b) => yc(a[0]) - yc(b[0]));
     const rowsS = [];
     for (const ws of ls) { const r = rowsS[rowsS.length - 1]; if (r && Math.abs(yc(ws[0]) - yc(r[0])) < lh * 0.5) r.push(...ws); else rowsS.push(ws.slice()); }
     const parts = [], cf = [];
     for (let ws of rowsS) {
-      if (parts.length && /[.?!]["”’]?$/.test(parts[parts.length - 1])) break;   // 文の終わりの後（帯の中の別の行）
       ws.sort((a, b) => a.x0 - b.x0);
+      if (parts.length && /[.?!]["”’]?$/.test(parts[parts.length - 1]) && !(DLG.test(parts[parts.length - 1]) && /^["“‘]/.test(ws[0].t))) break;   // 文の終わりの後（帯の中の別の行）。会話の次の発言は続ける
       while (ws.length > 1 && ws[0].t.length <= 2 && ws[1].x0 - ws[0].x1 > lh * 0.8) ws = ws.slice(1);                  // 帯の左の太線などの読み取り
       while (ws.length > 1 && ws[ws.length - 1].x0 - ws[ws.length - 2].x1 > lh * 1.5) ws = ws.slice(0, -1);             // 右に離れた読み取り（隣のページなど）
       const t = enText(joinWords(ws));
@@ -1695,11 +1699,13 @@ function buildPhoto(pages, lt) {
         const pj = te < rR.length ? ja : '';
         if (pj && JPRE.test(pj)) { let bv = -1; for (let a = tb; a >= Math.max(blk.i1, tb - 2); a--) { if (a < tb && !plainJa(L[a])) break; const v = dice(bigr(L.slice(a, tb + 1).join('')), bigr(pj)); if (v > bv + 0.02) { bv = v; t0 = a; } } }
         else while (t0 - 1 >= blk.i1 && tb - t0 < 2 && plainJa(L[t0 - 1])) t0--;
+        const qn = (x, c) => (x.match(new RegExp(c, 'g')) || []).length;
+        while (t0 - 1 >= blk.i1 && qn(L.slice(t0, tb + 1).join(''), '」') > qn(L.slice(t0, tb + 1).join(''), '「') && JPRE.test(L[t0 - 1]) && !posOf(L[t0 - 1]) && !/[A-Za-z]{2}/.test(L[t0 - 1])) t0--;
         ja = L.slice(t0, tb + 1).join(''); u.jaLT = true; for (let i = t0; i <= tb; i++) usedL.add(i);
       }
       const ltH = [];
       for (let i = blk.i1; i < L.length; i++) {
-        if (usedL.has(i)) continue;
+        if (usedL.has(i) || (i > blk.i1 && opened(L[i - 1]) && /^[（(［\[【〔]|[）)\]］】〕]/.test(L[i]))) continue;   // 前の行の括弧の続き（(move)】 など）は見出し語ではない
         const c0 = L[i].replace(/^\d+\s*/, '');
         if (!HWRE.test(c0) || !/[A-Za-z]/.test(c0)) continue;
         let hw = cleanHw(c0), i2 = i;
@@ -1836,6 +1842,7 @@ function buildPhoto(pages, lt) {
     const en = fixEn(u.en, noteS);
     if (!blk && u.cf.reduce((a, v) => a + v, 0) / u.cf.length < 70) noteS('英文の読み取りの確度が低いので、本と見比べてください');
     if (!u.jaLT && jaRows.some(r => r.cf < 60)) noteS('和訳の読み取りの確度が低いので、本と見比べてください');
+    { const o = (ja.match(/「/g) || []).length, c = (ja.match(/」/g) || []).length; if (c > o && /^[ぁ-んァ-ヶ一-龠々]/.test(ja)) ja = '「' + ja; }   // 先頭の「が読めなかった時
     out.push({en, ja, chk: chkS, words: words.map((w, j) => {
       const rs = wl[j] || [], L = rs.map(r => r.t);
       asgDbg.push(`［${w.hw}］ ` + (L.join(' ／ ') || '（行なし）'));
@@ -1881,7 +1888,11 @@ function ltBlocks(text) {
     cur.L.push(L[k]);
     if (JPRE.test(L[k]) && /。[」』]?$/.test(L[k])) cur.hasJa = true;
   }
-  for (const b of blocks) { let en = b.L[0], i = 1; while (i < b.L.length && i <= 3 && !/[.?!"”’]$/.test(en) && enOnly(b.L[i]) && /^[a-z]/.test(b.L[i]) && (/[.?!"”’]$/.test(b.L[i]) || /,$/.test(en))) en += ' ' + b.L[i++]; b.en = en; b.i1 = i; }
+  for (const b of blocks) {
+    let en = b.L[0], i = 1;
+    while (i < b.L.length && i <= 3 && enOnly(b.L[i]) && ((!/[.?!"”’]$/.test(en) && /^[a-z]/.test(b.L[i]) && (/[.?!"”’]$/.test(b.L[i]) || /,$/.test(en))) || (DLG.test(en) && /^["“‘]\s*[A-Z]/.test(b.L[i])))) en += ' ' + b.L[i++];   // 会話の次の発言（引用符で始まる行）も続ける
+    b.en = en; b.i1 = i;
+  }
   return blocks;
 }
 // 写真を読み取る：1回目は全体を日本語と英語で（段の配置を自動で判定）→ 右の段（意味）を切り出して読み直す →
