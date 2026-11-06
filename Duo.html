@@ -178,7 +178,7 @@ label.btn{position:relative;display:flex;align-items:center;justify-content:cent
 /* ===== 保存（この端末のブラウザ内だけ） ===== */
 const K = {d: 'duoApp:data', p: 'duoApp:prog', u: 'duoApp:ui'};
 const NSEC = 45;
-const APP_VER = '2026-11-06 17:10';   // 更新するたびに変える
+const APP_VER = '2026-11-06 17:40';   // 更新するたびに変える
 function load(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } }
 function store(k, v) {
   try { localStorage.setItem(k, JSON.stringify(v)); return true; }
@@ -254,7 +254,9 @@ function toks(s) {
   while ((m = re.exec(s))) out.push({t: m[0].toLowerCase().replace(/’/g, "'"), s: m.index, e: m.index + m[0].length});
   return out;
 }
-const BE = new Set('be am is are was were been being'.split(' '));
+const BE = new Set("be am is are was were been being isn't aren't wasn't weren't".split(' '));
+// 助動詞などの否定形・短縮形（can afford… が英文で cannot afford になっている時など）
+const AUXF = {can: "cannot can't could couldn't", will: "won't would wouldn't", do: "don't doesn't didn't", have: "haven't hasn't hadn't", must: "mustn't", should: "shouldn't", need: "needn't", dare: "daren't", shall: "shan't", may: 'might'};
 const POSS = new Set("my your his her its our their one's".split(' '));
 const REFL = new Set('myself yourself himself herself itself ourselves yourselves themselves oneself'.split(' '));
 const IRR = {arise:'arose arisen',awake:'awoke awoken',bear:'bore borne born',beat:'beaten',begin:'began begun',bend:'bent',bind:'bound',bite:'bit bitten',bleed:'bled',blow:'blew blown',break:'broke broken',breed:'bred',bring:'brought',build:'built',burn:'burnt',buy:'bought',catch:'caught',choose:'chose chosen',cling:'clung',come:'came',creep:'crept',deal:'dealt',dig:'dug',do:'did done',draw:'drew drawn',dream:'dreamt',drink:'drank drunk',drive:'drove driven',dwell:'dwelt',eat:'ate eaten',fall:'fell fallen',feed:'fed',feel:'felt',fight:'fought',find:'found',flee:'fled',fling:'flung',fly:'flew flown',forbid:'forbade forbidden',freeze:'froze frozen',get:'got gotten',give:'gave given',go:'went gone',grind:'ground',grow:'grew grown',hang:'hung',have:'had has',hear:'heard',hide:'hid hidden',hold:'held',keep:'kept',kneel:'knelt',know:'knew known',lay:'laid',lead:'led',lean:'leant',leap:'leapt',learn:'learnt',leave:'left',lend:'lent',lie:'lay lain lying',light:'lit',lose:'lost',make:'made',mean:'meant',meet:'met',pay:'paid',prove:'proven',ride:'rode ridden',ring:'rang rung',rise:'rose risen',run:'ran',say:'said',see:'saw seen',seek:'sought',sell:'sold',send:'sent',sew:'sewn',shake:'shook shaken',shine:'shone',shoot:'shot',show:'shown',shrink:'shrank shrunk',sing:'sang sung',sink:'sank sunk',sit:'sat',slay:'slew slain',sleep:'slept',slide:'slid',smell:'smelt',sow:'sown',speak:'spoke spoken',speed:'sped',spell:'spelt',spend:'spent',spill:'spilt',spin:'spun',spit:'spat',spoil:'spoilt',spring:'sprang sprung',stand:'stood',steal:'stole stolen',stick:'stuck',sting:'stung',stink:'stank stunk',stride:'strode stridden',strike:'struck stricken',string:'strung',strive:'strove striven',swear:'swore sworn',sweep:'swept',swell:'swollen',swim:'swam swum',swing:'swung',take:'took taken',teach:'taught',tear:'tore torn',tell:'told',think:'thought',throw:'threw thrown',tread:'trod trodden',wake:'woke woken',wear:'wore worn',weave:'wove woven',weep:'wept',win:'won',wind:'wound',wring:'wrung',write:'wrote written',good:'better best',well:'better best',bad:'worse worst',ill:'worse worst',far:'farther farthest further furthest',little:'less least',many:'more most',much:'more most',child:'children',man:'men',woman:'women',person:'people',foot:'feet',tooth:'teeth',goose:'geese',mouse:'mice',criterion:'criteria',phenomenon:'phenomena'};
@@ -284,6 +286,7 @@ function wmatch(t, p, loose) {
   if (p === 'be') return BE.has(t);
   if (p === "one's") return POSS.has(t);
   if (p === 'oneself') return REFL.has(t);
+  if (AUXF[p] && AUXF[p].split(' ').includes(t)) return true;
   return forms(p).has(t);
 }
 function mparts(T, parts, pi, from, loose) {
@@ -645,7 +648,7 @@ function kindOf(hw) { return /\s/.test(phNorm(hw).replace(/\([^)]*\)/g, ' ').rep
 const deacc = x => x.normalize('NFD').replace(/[̀-ͯ]/g, '').normalize('NFC');
 function baseOf(hw) { return toks(phNorm(hw).replace(/…/g, ' ')).map(o => o.t).filter(x => x.length > 1 && !['be', 'an', 'the', 'to', "one's", 'oneself'].includes(x))[0] || ''; }
 function stemOf(b) { return b.length > 4 && /[ey]$/.test(b) ? b.slice(0, -1) : b; }
-function cleanHw(x) { return x.replace(/\b(OF|TO|IN|ON|AT|FOR|WITH|BY|FROM|AS|INTO|ABOUT)\b/g, m => m.toLowerCase()).replace(/\s+[.·・]$/, ' …').replace(/\.{2,}/g, '…').replace(/^([^(（]*[A-Za-z])\s*…\)/, '$1(…)').replace(/['’`´\d¹²³]+$/, '').replace(/\s+/g, ' ').trim(); }
+function cleanHw(x) { return x.replace(/\b(OF|TO|IN|ON|AT|FOR|WITH|BY|FROM|AS|INTO|ABOUT)\b/g, m => m.toLowerCase()).replace(/\s+[.·・]$/, ' …').replace(/\.{2,}/g, '…').replace(/…[.．]+/g, '…').replace(/^([^(（]*[A-Za-z])\s*…\)/, '$1(…)').replace(/['’`´\d¹²³]+$/, '').replace(/\s+/g, ' ').trim(); }
 function opened(x) { let d = 0; for (const c of x) { if ('（([［【〔'.includes(c)) d++; else if ('）)]］】〕'.includes(c) && d) d--; } return d > 0; }
 function lcp(p, q) { let n = 0; while (n < p.length && n < q.length && p[n] === q[n]) n++; return n; }
 // ── 英単語の綴りの一覧（ejdict-hand〔パブリックドメイン〕の見出し語から作った語の一覧。意味は使わない）
@@ -729,6 +732,7 @@ function spellFix(wd, st, note) {
     if (/^[A-Z][a-z]+$/.test(tok) || knownX(t)) return tok;
     let best = '';
     let hc = 1.01; for (const h of hwT) { const c = wcost(t, h); if (c < hc) { hc = c; best = h; } }   // 見出し語の綴り
+    if (!best && t.length >= 4) best = segW(t, hwT) || '';   // 空白が抜けた（asis → as is）
     if (!best) {
       const cand = new Map();
       // 1字違い（読み違えやすい字の違い、または見出し語と同じ書き出しの語との違い）の一覧の語
@@ -739,7 +743,6 @@ function spellFix(wd, st, note) {
       const ls = [...cand].sort((x, y) => x[1] - y[1]);
       if (ls.length && ls[0][1] <= lim && (ls.length === 1 || ls[1][1] - ls[0][1] >= 0.5)) best = ls[0][0];
     }
-    if (!best && t.length >= 6) best = segW(t, hwT) || '';
     if (!best) return tok;
     note(`英語の綴りを直しました（${tok} → ${best}）。本と見比べてください`);
     return best;
@@ -764,7 +767,7 @@ function dashPos(x) { const t = x.replace(JUNK, ''); return DASH.test(t) && !!po
 const ENRUN = /^[A-Za-zÀ-ɏ][A-Za-zÀ-ɏ'’\-]*(?:(?:\s*…\s*|\s*\.{2,}\s*|\s+)[A-Za-zÀ-ɏ'’\-]+){0,3}/;
 function relLine(x) {
   const t = x.replace(JUNK, ''), m = t.match(ENRUN); if (!m) return false;
-  return /^[名動形副前接助感構頭尾代定图図]/.test(t.slice(m[0].length).replace(/^[\s.…]*(?:[(（][^)）]{0,12}[)）])?[\s.…~〜～一ー－]*/, '').replace(/^[\s\d¹²³'’]+/, ''));
+  return /^[名動形副前接助感構頭尾代定图図]/.test(t.slice(m[0].length).replace(/^[\s.…]*(?:[(（][^)）ぁ-んァ-ヶ一-龠々]{0,12}[)）])?[\s.…~〜～一ー－]*/, '').replace(/^[\s\d¹²³'’]+/, ''));
 }
 // 英語の語だけの短い行（品詞と意味が次の行に続く関連語）
 function enShort(x) { const t = x.replace(JUNK, '').trim(), m = t.match(ENRUN); return !!m && /^[\s\d¹²³'’…]*$/.test(t.slice(m[0].length)); }
@@ -779,7 +782,7 @@ function bare(p, st) {
 function cont(p, x, st) { if (relLine(x) && (!opened(p) || !/^[^（(［\[【〔]*[）)\]］】〕]/.test(x))) return false; return opened(p) || /^[）)\]］】〕」』②-⑳]/.test(x) || (/[A-Za-z0-9\/\-]$/.test(p) && /^[a-z]/.test(x)) || bare(p, st); }
 function joinL(L) { return L.reduce((a, x) => a + (a && /[A-Za-z0-9]$/.test(a) && /^[A-Za-z]/.test(x) ? ' ' : '') + x, ''); }
 // 派生語の行の先頭から「単語」と品詞を取り出す
-function splitHead(t, s, b) {
+function splitHead(t, s, b, h0) {
   t = t.replace(/^([A-Za-zÀ-ɏ]+)[06](?=[a-zÀ-ɏ])/, '$1o').replace(/([a-zÀ-ɏ])[06](?=[a-zÀ-ɏ])/g, '$1o');
   const m = t.match(/^[A-Za-zÀ-ɏ][A-Za-zÀ-ɏ'’\-]*/);
   if (!m) return {wd: '', pos: '', rest: t};
@@ -794,6 +797,7 @@ function splitHead(t, s, b) {
   wd = deacc(wd).replace(/['’`´\d¹²³]+$/, '').replace(/…+/g, '…').replace(/\s+/g, ' ').trim();
   const w0 = wd.toLowerCase(), w1 = w0.slice(1);
   if (s && !w0.startsWith(s) && (w1.startsWith(s) || (b && lcp(w1, b) >= 4 && lcp(w1, b) > lcp(w0, b)))) wd = wd.slice(1);
+  else if (h0 && h0.length >= 2 && !w0.startsWith(h0 + ' ') && w1.startsWith(h0 + ' ')) wd = wd.slice(1);
   const pm = rest.match(/^([名動形副前接助感構頭尾代定图図])/) || rest.match(/^([Z#])(?![A-Za-z])/); // 単語の直後なら漢字が続いても品詞とみなす
   let pos = '';
   if (pm) { pos = POSALT[pm[1]] || pm[1]; rest = rest.slice(1); }
@@ -810,8 +814,9 @@ function normT(t) {
     .replace(/([ぁ-んァ-ヶ一-龠々])\.(?![A-Za-z])/g, '$1…')
     .replace(/([ぁ-んァ-ヶ一-龠々）)])\s*,\s*(?=[ぁ-んァ-ヶ一-龠々（(…])/g, '$1，').replace(/…{2,}/g, '…')
     .replace(/。(?=\s*(?:[…ぁ-んァ-ヶ一-龠々]|[（(［\[〔][^）)\]］〕]*[ぁ-んァ-ヶ一-龠々]))/g, '，')   // 意味の途中の「。」は「，」の読み違い（後ろが英語の言い換えなら文の終わり）
-    .replace(/［([^［］〔〕\[\]]{1,20})〕/g, '〔$1〕').replace(/〔([^［］〔〕\[\]]{1,20})］/g, '［$1］')   // 開きと閉じの種類が違う括弧は閉じに合わせる
-    .replace(/([①-⑳])\s*[.．]+(?=\s*[…ぁ-んァ-ヶ一-龠々（(])/g, '$1…').replace(/…{2,}/g, '…');   // 丸数字のすぐ後の「.」は「…」の読み違い
+    .replace(/[［〔]([^［］〔〕\[\]]{1,20})[］〕]/g, (m0, x) => m0[0] === '［' && m0.slice(-1) === '］' || m0[0] === '〔' && m0.slice(-1) === '〕' ? m0 : x.length >= 3 && /[でてに]$/.test(x) ? '〔' + x + '〕' : '［' + x + '］')   // 開きと閉じの種類が違う括弧：〔文頭で〕のような使い方の説明なら〔〕、それ以外は［］
+    .replace(/([①-⑳])\s*[.．]+(?=\s*[…ぁ-んァ-ヶ一-龠々（(])/g, '$1…').replace(/…{2,}/g, '…')   // 丸数字のすぐ後の「.」は「…」の読み違い
+    .replace(/(^|[\s　名動形副前接助感構頭尾代定])[・･](?=[ぁ-んァ-ヶ一-龠々])/g, '$1…');   // 品詞のすぐ後の「・」も「…」の読み違い
 }
 // 「い」が英字の U に読み取られたもの（新しU (unique → 新しい）を直す
 function fixI(t, note) { return t.replace(/([ぁ-ん])\s*[UuＵ](?=\s*[（(]|\s*$)/g, (m0, a) => { note('「い」が英字の U に読み取られていたところを直しました'); return a + 'い'; }); }
@@ -907,7 +912,7 @@ function buildWord(j, L, A, st) {
   items.forEach((it, idx) => {
     let t = normT(fixI(joinL(it.L).replace(JUNK, ''), note));
     if (it.k === 'd') { // 派生語：「単語（品詞）日本語」だけを残す
-      const h = splitHead(t, st[j].s, st[j].b), g = senses(h.rest, note);
+      const h = splitHead(t, st[j].s, st[j].b, (String(st[j].hw || '').toLowerCase().match(/^[a-z']+(?=\s)/) || [''])[0]), g = senses(h.rest, note);
       h.wd = spellFix(h.wd, st, note);
       if (!g.length) note(`${h.wd || '関連語'} の意味が読み取れませんでした`);
       lastD = h.wd;
@@ -1000,6 +1005,8 @@ function ocrParse(text) {
     const line = raw.replace(/^[\s　|•・]+|[\s　]+$/g, '');
     if (line) L.push(line);
   }
+  // 2行に分かれた発音（［…（ラクシャリィ/ と ラグジャリィ）］）は1行にする
+  for (let k = 0; k + 1 < L.length; k++) if (/[（(][ァ-ヶー・\/\s]*$/.test(L[k]) && /[ァ-ヶ]/.test(L[k]) && !/[ぁ-ん一-龠々]/.test(L[k]) && /^[ァ-ヶー・\/\s]+[）)]\s*[\]］」』〕|1lI]?$/.test(L[k + 1])) { L[k] += L[k + 1]; L[k + 1] = ''; }
   // 品詞の字だけの行は、次の行（その品詞の意味）につなぐ（文章（テキスト認識）では品詞の四角が別の行になることがある）
   for (let k = 0; k + 1 < L.length; k++) if (/^[名動形副前接助感構頭尾代定图図]$/.test(L[k]) && !/^[A-Za-z]/.test(L[k + 1]) && !posOf(L[k + 1]) && !closeMore(L[k + 1])) { L[k + 1] = ('图図'.includes(L[k]) ? '名' : L[k]) + ' ' + L[k + 1]; L[k] = ''; }
   for (let k = L.length - 1; k >= 0; k--) if (!L[k]) L.splice(k, 1);
@@ -1384,11 +1391,11 @@ function withPos(l, pf, pd) {
   return (pd ? '━ ' : '') + pf + ' ' + t.replace(/^\s+/, '');
 }
 // 派生語の語だけの行か（品詞と意味は次の行）
-function wordOnly(l) { const t = l.replace(JUNK, ''), m = t.match(ENRUN); return !!m && !t.slice(m[0].replace(/\s+[FZ#](?:\s.*)?$/, '').length).replace(/^[\s.…·・~〜～]*(?:[(（][^)）]{0,12}[)）])?[\s.…·・~〜～]*(?:[FZ#](?![A-Za-z]))?[\s.…·・]*/, ''); }
+function wordOnly(l) { const t = l.replace(JUNK, ''), m = t.match(ENRUN); return !!m && !t.slice(m[0].replace(/\s+[FZ#](?:\s.*)?$/, '').length).replace(/^[\s.…·・~〜～]*(?:[(（][^)）ぁ-んァ-ヶ一-龠々]{0,12}[)）])?[\s.…·・~〜～]*(?:[FZ#](?![A-Za-z]))?[\s.…·・]*/, ''); }
 function withMidPos(l, pm) {
   const t = l.replace(JUNK, ''), m = t.match(ENRUN); if (!m) return l;
   let i = m[0].replace(/\s+[FZ#](?:\s.*)?$/, '').length;   // 品詞の四角が Z（名）・F（形）に読まれたものは語に含めない
-  i += t.slice(i).match(/^[\s.…~〜～]*(?:[(（][^)）]{0,12}[)）])?(?:\s*[\[［][^\]］」]{0,20}[\]］」])?[\s.…~〜～一ー－]*/)[0].length;
+  i += t.slice(i).match(/^[\s.…~〜～]*(?:[(（][^)）ぁ-んァ-ヶ一-龠々]{0,12}[)）])?(?:\s*[\[［][^\]］」]{0,20}[\]］」])?[\s.…~〜～一ー－]*/)[0].length;
   if (!t.slice(i).trim()) return l;   // 語だけの行（品詞と意味は次の行にある）
   const c = t[i] || '';
   if (c === pm || (pm === '名' && '图図'.includes(c)) || (/[FZ#]/.test(c) && !/[A-Za-z]/.test(t[i + 1] || ''))) return t.slice(0, i) + pm + ' ' + t.slice(i + 1).replace(/^\s+/, '');
@@ -1411,7 +1418,7 @@ function fillKanji(lt, ph) {
   const okK = c => KNJ.test(c) && !KNX.test(c), ins = [];
   for (let k = 1; k < P.length; k++) {
     const [i0, j0] = P[k - 1], [i1, j1] = P[k];
-    if (i1 === i0 + 1 && j1 === j0 + 2 && okK(b[j0 + 1]) && run(k - 1, -1) >= 2 && run(k, 1) >= 2 && lt[A[i1] - 1] !== b[j0 + 1]) ins.push([A[i1], b[j0 + 1]]);
+    if (i1 === i0 + 1 && j1 === j0 + 2 && okK(b[j0 + 1]) && run(k - 1, -1) >= 2 && run(k, 1) >= 2 && lt[A[i1] - 1] !== b[j0 + 1]) ins.push([B[j0 + 1] === B[j0] + 1 ? A[i0] + 1 : A[i1], b[j0 + 1]]);
   }
   if (P.length && P[0][0] === 0 && run(0, 1) >= 3 && /[A-Za-z]/.test(lt.slice(0, A[0]))) {
     const pre = b.slice(0, P[0][1]), c = pre.length === 1 ? pre[0] : pre.length === 2 && POSCH.includes(pre[0]) ? pre[1] : '';
@@ -1454,6 +1461,21 @@ function subKanji(lt, ph) {
   if (!subs.length) return null;
   let t = lt; for (const [q, , cb] of subs) t = t.slice(0, q) + cb + t.slice(q + 1);
   return {t, subs: subs.map(([, ca, cb]) => ca + '→' + cb)};
+}
+// 文章の行が丸数字で終わっていて（購買② など）、写真の行にはその後の意味がある時、写真の続き（購入品）を返す
+function photoTail(lt, ph) {
+  const A = [], B = [];
+  for (let i = 0; i < lt.length; i++) if (JAK.test(lt[i])) A.push(i);
+  for (let i = 0; i < ph.length; i++) if (JAK.test(ph[i])) B.push(i);
+  const n = A.length, m = B.length; if (n < 2 || m < 3) return '';
+  const a = A.map(i => lt[i]), b = B.map(i => ph[i]), L = [];
+  for (let i = 0; i <= n; i++) L.push(new Int16Array(m + 1));
+  for (let i = n - 1; i >= 0; i--) for (let j = m - 1; j >= 0; j--) L[i][j] = a[i] === b[j] ? L[i + 1][j + 1] + 1 : Math.max(L[i + 1][j], L[i][j + 1]);
+  const P = []; for (let i = 0, j = 0; i < n && j < m;) { if (a[i] === b[j]) { P.push([i, j]); i++; j++; } else if (L[i + 1][j] >= L[i][j + 1]) i++; else j++; }
+  const last = P[P.length - 1]; if (!last || last[0] !== n - 1 || P.length < n * 0.6) return '';
+  let rest = ph.slice(B[last[1]] + 1); const mk = rest.search(/[①-⑳®@]/); if (mk >= 0 && mk <= 6) rest = rest.slice(mk + 1);
+  rest = rest.replace(/^[^ぁ-んァ-ヶ一-龠々（(〔［\[]+/, '').trim();
+  return (rest.match(/[ぁ-んァ-ヶ一-龠々]/g) || []).length >= 2 && /[一-龠々]/.test(rest) ? rest : '';
 }
 // 見出し語の先頭だけが大文字に読まれた時（Passage など）、英文中で小文字なら小文字にする
 function caseFix(hw, en) { if (!/^[A-Z][a-z]/.test(hw || '')) return hw; const r = locate(en, hw); return r && /^[a-z]/.test(r.ans) ? hw[0].toLowerCase() + hw.slice(1) : hw; }
@@ -1877,7 +1899,39 @@ function buildPhoto(pages, lt) {
         else if (c === 2) k--;
         else { const q = rowsU[r - 1], i = CL[k - 1].i; asg[i] = {j: q.j, y: q.y, r: q.r}; q.hit = true; hit++; k--; }
       }
+      // 文章の、ひらがなだけの短い行で、写真のどの行にも無いものは、ふりがな（贅沢 の上の ぜいたく など）として使わない
+      bl.L.forEach((l, i) => { if (asg[i] || !ok(i) || !/^[ぁ-ん]{2,8}$/.test(l)) return; const b = bigr(l); if (!rR.some(r => inc(b, bigr(r.t)) >= 0.5)) drop.add(i); });
+      // 対応の見つからなかった文章の行（日本語のあるもの）が、前後の対応した行の間で、対応の無い写真の行と同じ数だけあれば、
+      // 順に対応づける（写真の読み違いで文字の並びが似なかった行。贅沢 → 殴沢 など）
+      { const ordR = rowsU.slice().sort((a, b) => a.y - b.y), at = new Map(ordR.map((q, k) => [q.r, k]));
+        let prev = -1, gap = [];
+        const flush = nk => {
+          const free = ordR.slice(prev + 1, nk).filter(q => !q.hit && JPRE.test(q.r.t)), Lj = gap.filter(i => JPRE.test(bl.L[i]));
+          if (free.length && free.length === Lj.length && Lj.every((i, k) => inc(bigr(bl.L[i]), free[k].b) >= 0.15)) Lj.forEach((i, k) => { const q = free[k]; asg[i] = {j: q.j, y: q.y, r: q.r}; q.hit = true; });
+          gap = [];
+        };
+        for (let i = 0; i < bl.L.length; i++) { if (asg[i] && asg[i].r) { const k = at.get(asg[i].r); flush(k); prev = Math.max(prev, k); } else if (ok(i)) gap.push(i); }
+        flush(ordR.length); }
       const rkS = new Set(); asg.forEach((a, i) => { if (a && a.r) { const f = fillKanji(bl.L[i], a.r.t); if (f) { bl.L[i] = f; rkS.add(i); } } });
+      // 文章で読めなかった所を、対応する写真の行で補う：派生語の行に日本語が無い（as it were の いわば）、丸数字の後が切れている（購買② の後）。
+      // 意味の頭の1字の漢字が記号の読み違い（Ⓕ{米} → 休 など）で写真に無ければ外す
+      const pfS = new Set(), jkS = new Set();
+      asg.forEach((a, i) => {
+        if (!a || !a.r) return;
+        const r = a.r, nx = bl.L[i + 1] || '', same = asg[i + 1] && asg[i + 1].r === r; let l = bl.L[i];
+        if (!JPRE.test(l) && JPRE.test(r.t) && !same) {
+          const m = l.replace(JUNK, '').match(/^[A-Za-zÀ-ɏ][A-Za-zÀ-ɏ'’\-]*(?:(?:\s*…\s*|\s+)(?:[a-zÀ-ɏ][A-Za-zÀ-ɏ'’\-]*|I(?![A-Za-z])|…))*/);
+          let k = r.pm ? r.t.indexOf(r.pm) + 1 : 0; if (k <= 0) k = r.t.search(JPRE);
+          const ja = r.t.slice(k).replace(/^[\s|｜!！]+/, '');
+          // 写真の行の頭の英語が、この行の語と同じ語の時だけ（別の派生語の行に対応していることがある）。次の行がこの語の意味の時は使わない
+          const nw = x => dacc(x).replace(/[^a-z]/g, ''), bw = m ? bigr(nw(m[0])) : null, bp = bigr(nw((r.t.match(/^[^ぁ-んァ-ヶ一-龠々]*/) || [''])[0]));
+          const strong = !!m && inc(bw, bp) >= 0.5 && inc(bp, bw) >= 0.5, nextM = asg[i + 1] && asg[i + 1].j === a.j && /^[名動形副前接助感構頭尾代定…ぁ-んァ-ヶ一-龠々（(①-⑳]/.test(nx);
+          if (strong && !nextM && JPRE.test(ja) && inc(bigr(ja), bigr(nx)) < 0.5) { l = m[0] + ' ' + (r.pm ? r.pm + ' ' : '') + ja; pfS.add(i); }
+        } else if (/[①-⑳]\s*$/.test(l) && !same) { const tl = photoTail(l, r.t); if (tl && inc(bigr(tl), bigr(nx)) < 0.5) { l = l.replace(/\s+$/, '') + tl; pfS.add(i); } }
+        const jm = l.match(/^([^ぁ-んァ-ヶ一-龠々]*?(?:[名動形副前接助感構頭尾代定]\s*)?)([一-龠々])(?=\s*[（(])/);
+        if (jm && !POSCH.includes(jm[2]) && !r.t.includes(jm[2]) && ja3('|' + jm[2] + '|') === 0) { l = jm[1] + l.slice(jm[0].length); jkS.add(i); }
+        bl.L[i] = l;
+      });
       const sbM = new Map(); asg.forEach((a, i) => { if (a && a.r) { const f = subKanji(bl.L[i], a.r.t); if (f) { bl.L[i] = f.t; sbM.set(i, f.subs); } } });   // 文章と写真で違う字は、よく使われる方に   // 文章で抜けた漢字を写真から補う
       const firstL = new Map(); asg.forEach((a, i) => { if (a && a.r && !firstL.has(a.r)) firstL.set(a.r, i); });
       for (const [r, i] of firstL) {
@@ -1905,7 +1959,7 @@ function buildPhoto(pages, lt) {
       ltCand += cand; ltHit += hit;
       if (cand >= 5 && hit < cand * 0.3) noteS('写真と文章の内容があまり一致しませんでした。同じページか確認してください');
       const lines = words.map(() => []);
-      asg.forEach((a, i) => { if (a) lines[a.j].push({t: bl.L[i], y: a.y, i, rk: rkS.has(i), sb: sbM.get(i)}); });
+      asg.forEach((a, i) => { if (a) lines[a.j].push({t: bl.L[i], y: a.y, i, rk: rkS.has(i), sb: sbM.get(i), pfl: pfS.has(i), jk: jkS.has(i)}); });
       // 文章のどの行にも似ていない写真の行（日本語が6文字以上あり、読み取りの確度が低くないもの）だけ、写真の読み取りで補う
       const LB = bl.L.map((l, i) => ok(i) ? bigr(l) : null).filter(Boolean);
       for (const r of rowsU) if (!r.cov && !r.hit && jaN(r.r.t) >= 6 && !(r.r.cf < 60) && LB.every(b => inc(r.b, b) < 0.25)) lines[r.j].push({t: r.r.t, y: r.y, i: -1, fb: true, cf: r.r.cf, posBad: r.r.posBad});
@@ -1931,6 +1985,8 @@ function buildPhoto(pages, lt) {
       if (rs.some(r => r.posBad)) M.chk.push('品詞の記号が読み取れなかった行があります');
       if (rs.some(r => r.fb)) M.chk.push('文章に無かった行を写真の読み取りで補いました。本と見比べてください');
       if (rs.some(r => r.rk)) M.chk.push('文章で抜けていた字を写真の読み取りで補いました。本と見比べてください');
+      if (rs.some(r => r.pfl)) M.chk.push('文章で読めなかった意味を写真の読み取りで補いました。本と見比べてください');
+      if (rs.some(r => r.jk)) M.chk.push('意味の頭の、記号の読み違いと思われる字を外しました。本と見比べてください');
       { const sb = rs.flatMap(r => r.sb || []); if (sb.length) M.chk.push(`文章と写真で読み取りの違う字を、よく使われる方にしました（${sb.join('、')}）。本と見比べてください`); }
       return {hw: w.hw, ja: M.ja, p: M.p, chk: M.chk};
     })});
@@ -1961,6 +2017,8 @@ function closeMore(x) { return (x.match(/[）)\]］】〕」』]/g) || []).lengt
 // テキスト認識でコピーした文章を、例文ごとに区切る（例文の行から、次の例文の行の前まで）
 function ltBlocks(text) {
   const L = String(text).replace(/\r\n?/g, '\n').split('\n').map(x => cleanRow(x.replace(/^[\s　|•・]+|[\s　]+$/g, ''))).filter(x => x && !NUMLN.test(x));
+  // 2行に分かれた発音（［…（ラクシャリィ/ と ラグジャリィ）］）は1行にする
+  for (let k = 0; k + 1 < L.length; k++) if (/[（(][ァ-ヶー・\/\s]*$/.test(L[k]) && /[ァ-ヶ]/.test(L[k]) && !/[ぁ-ん一-龠々]/.test(L[k]) && /^[ァ-ヶー・\/\s]+[）)]\s*[\]］」』〕|1lI]?$/.test(L[k + 1])) { L[k] += L[k + 1]; L[k + 1] = ''; }
   for (let k = 0; k + 1 < L.length; k++) if (/^[名動形副前接助感構頭尾代定图図]$/.test(L[k]) && !/^[A-Za-z]/.test(L[k + 1]) && !posOf(L[k + 1]) && !closeMore(L[k + 1])) { L[k + 1] = ('图図'.includes(L[k]) ? '名' : L[k]) + ' ' + L[k + 1]; L[k] = ''; }
   for (let k = L.length - 1; k >= 0; k--) if (!L[k]) L.splice(k, 1);
   const blocks = []; let cur = null;
