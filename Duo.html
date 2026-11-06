@@ -178,7 +178,7 @@ label.btn{position:relative;display:flex;align-items:center;justify-content:cent
 /* ===== 保存（この端末のブラウザ内だけ） ===== */
 const K = {d: 'duoApp:data', p: 'duoApp:prog', u: 'duoApp:ui'};
 const NSEC = 45;
-const APP_VER = '2026-11-06 08:00';   // 更新するたびに変える
+const APP_VER = '2026-11-06 10:50';   // 更新するたびに変える
 function load(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } }
 function store(k, v) {
   try { localStorage.setItem(k, JSON.stringify(v)); return true; }
@@ -633,6 +633,7 @@ const POSRX = /^([名動形副前接助感構頭尾代定])(?=[回口]|[^ぁ-ん
 const POSALT = {'图': '名', '図': '名', 'Z': '名', '#': '形'};                    // 派生語の後ろの品詞の記号の読み間違い
 const JUNK = /^[\s　□口|｜・•]+/;                                             // □（チェック欄）などの読み取り
 const DASH = /^[━ーｰ\-－—―一]+\s*/;                                             // 「━」＝同じ単語の別の品詞
+const LTPRON = /^[\[［L(（|]?\s*[A-Za-zÀ-ɏəʃʒæŋɔʌθðɪʊː:'’ˈˌ\-0-9 ]{2,}\s*[（(](?=[^）)]*[ァ-ヶ0-9])[^）)]{1,24}[）)]\s*[\]］」』〕|1lI]?$/;   // 文章（テキスト認識）の発音の行
 const PRON = /^[^ぁ-んァ-ヶ一-龠々]*[A-Za-z][^ぁ-んァ-ヶ一-龠々]*[（(](?=[^）)]*[ァ-ヶ])[ァ-ヶぁ-んー・\s\[\]［］\/\-－]+[）)][\]］」』〕]?$/; // 発音
 const STOPW = new Set('of to in on at for the a an and or but with by from as into about'.split(' '));
 const NUMLN = /^[0-9０-９]{1,3}$/;                                              // 見出しの番号・ページ番号
@@ -703,7 +704,7 @@ const JA = /[ぁ-んァ-ヶ一-龠々ー]/;
 const OPN = '（(［[〔【「『', CLS = '）)］]〕】」』';
 const CNTOK = /[復転避収答想顧路数覧調実論座癖頭述語笛紅]/; // 回・口で始まる語。それ以外の先頭の回・口は Ⓒ Ⓤ の読み間違いとして省く
 function normT(t) {
-  return t.replace(/[ⒸⓊⓈⓅ©]/g, ' ').replace(/(^|[^A-Za-z])(?:[CＣ]\s*[,.、・，]?\s*[UＵ]|[CUSPＣＵＳＰ])(?=\s*[ぁ-んァ-ヶ一-龠々（(〔［\[])/g, '$1 ').replace(/(?:ょ[と4]ょ?|なょ?[=＝]|なょ?[と4]|[gsぉ][gsょ]?[と=＝])(?=[がのをにで）)])/g, 'など').replace(/<->|<>/g, '↔').replace(/[.‥]*…[.…‥]*|\.{2,}|‥/g, (m, o, str) => /…\.$/.test(m) && /[ぁ-んァ-ヶ一-龠々（]/.test(str[o + m.length] || '') ? '…，' : '…').replace(/[~〜]/g, '～')
+  return t.replace(/(^|[)）\]］\s])([1-9])(?:[.．]|[UCＵＣ©@](?![A-Za-z]))\s*(?=[（(…ぁ-んァ-ヶ一-龠々])/g, (m0, a, d) => a + CIRC[d - 1]).replace(/[ⒸⓊⓈⓅ©]/g, ' ').replace(/(^|[^A-Za-z])(?:[CＣ]\s*[,.、・，]?\s*[UＵ]|[CUSPＣＵＳＰ])(?=\s*[ぁ-んァ-ヶ一-龠々（(〔［\[])/g, '$1 ').replace(/(?:ょ[と4]ょ?|なょ?[=＝]|なょ?[と4]|[gsぉ][gsょ]?[と=＝])(?=[がのをにで）)])/g, 'など').replace(/<->|<>/g, '↔').replace(/[.‥]*…[.…‥]*|\.{2,}|‥/g, (m, o, str) => /…\.$/.test(m) && /[ぁ-んァ-ヶ一-龠々（]/.test(str[o + m.length] || '') ? '…，' : '…').replace(/[~〜]/g, '～')
     .replace(/…[.,](?=\s*[ぁ-んァ-ヶ一-龠々（(])/g, '…，')
     .replace(/([ぁ-んァ-ヶ一-龠々])\.(?![A-Za-z])/g, '$1…')
     .replace(/([ぁ-んァ-ヶ一-龠々）)])\s*,\s*(?=[ぁ-んァ-ヶ一-龠々（(…])/g, '$1，').replace(/…{2,}/g, '…');
@@ -728,9 +729,9 @@ function jparts(t, note) {
       if (OPN.includes(t[k]) && t[k] !== '【' && !jaGroup(t, k)) { const e = grpEnd(t, k); if (e < 0 || /^\s*[↔←→]/.test(t.slice(k + 1, e))) { k = t.length; break; } k = e; skip = true; continue; }
       break;
     }
-    if (!skip || k >= t.length || !(JA.test(t[k]) || (OPN.includes(t[k]) && t[k] !== '【' && jaGroup(t, k)))) break;
+    if (!skip || k >= t.length || !(JA.test(t[k]) || (t[k] === '…' && jaAt(t, k + 1)) || (OPN.includes(t[k]) && t[k] !== '【' && jaGroup(t, k)))) break;
     const [y, j] = jphraseAt(t.slice(k), note);
-    if (!y || y.length < 2 || /^ー/.test(y) || (y.match(/ー/g) || []).length * 3 > y.length) break;   // 罫線が「ーーー」に読まれたものなどは除く
+    if (!y || y.length < 3 || (!/[一-龠々]/.test(y) && y.length < 4) || /^ー/.test(y) || (y.match(/ー/g) || []).length * 3 > y.length) break;   // 罫線が「ーーー」に読まれたものなどは除く
     out.push(y); note('番号が読み取れなかった意味を、次の番号の意味として入れました。本と見比べてください'); x = y; i = k + j;
   }
   return out;
@@ -1132,7 +1133,11 @@ function findMarks(cv, P) {
     parts[i] = m; parts[j] = null; j = i;
   }
   const boxes = parts.filter(b => b && b.x1 - b.x0 >= lh * 6 && b.y1 - b.y0 >= lh * 1.2);
-  boxes.forEach(b => { const fillN = a => { for (let i = 0; i < a.length; i++) if (a[i] == null) { let d = 1; while (d < a.length && a[i - d] == null && a[i + d] == null) d++; a[i] = a[i - d] != null ? a[i - d] : a[i + d] != null ? a[i + d] : null; } }; fillN(b.tp); fillN(b.bp); });
+  boxes.forEach(b => {
+    const fillN = a => { for (let i = 0; i < a.length; i++) if (a[i] == null) { let d = 1; while (d < a.length && a[i - d] == null && a[i + d] == null) d++; a[i] = a[i - d] != null ? a[i - d] : a[i + d] != null ? a[i + d] : null; } };
+    const medN = a => { if (a.some(v => v == null)) return a; return a.map((v, i) => { const w = a.slice(Math.max(0, i - 7), i + 8).sort((x, y) => x - y); return w[w.length >> 1]; }); };
+    fillN(b.tp); fillN(b.bp); b.tp = medN(b.tp); b.bp = medN(b.bp);
+  });
   return {frames, hl: L.h, vl: L.v, boxes};
 }
 // 枠の中身（品詞の漢字や C・U の文字）を、1行に1つずつ並べた画像にする（まとめて1回で読む）
@@ -1203,7 +1208,8 @@ function joinWords(ws) { let t = '', sp = false; for (const w of ws) { t += (t &
 const DOTS = /^[:;|¦!.,'`´·・：\-_~"ilI1丨]+$/;   // 段の間の点線などの読み取り
 // 右の段の行の先頭の、チェック欄・品詞の四角・(1) などの読み取りを整える
 function cleanRow(t) {
-  t = t.replace(/(^|[^A-Za-z0-9])([A-Za-z]+)[06]([a-z]+)/g, '$1$2o$3').replace(/^｜/, '|').replace(/^([□口ロコ|]?\s*)1(?=[a-z\u00e0-\u024f]{3,})/, '$1l');
+  t = t.replace(/(^|[^A-Za-z0-9])([A-Za-z]+)[06]([a-z]+)/g, '$1$2o$3').replace(/^｜/, '|').replace(/^([□口ロコ|]?\s*)1(?=[a-z\u00e0-\u024f]{3,})/, '$1l')
+    .replace(/^(?:_+|[\]］](?=\s*[a-z\u00e0-\u024f])|I(?=[a-z\u00e0-\u024f]{3,})|[0-9]\s+(?=[a-z\u00e0-\u024f]{3,}))\s*/, '');
   return t.replace(/^[\[［|ロ口□▢☐◻▯■CDO0〇○コ]\s*[一ーｰ\-－—―━]+\s*/, '━').replace(/^(?:[O0〇○ロ□口▢☐◻▯■コ]|\[\s*\])\s+(?=[A-Za-z\u00c0-\u024f━ーｰ\-－—―一])/, '').replace(/^(?:[O0〇○ロ□口▢☐◻▯■]|\[\s*\])\s+/, '').replace(/^(?:[O0〇○ロ□口▢☐◻▯■コ]|\[\s*[\]J|1lI]?|[|L][\]J])\s*(?=[a-z\u00e0-\u024f])/, '').replace(/^[CD]\s+(?=[a-z\u00e0-\u024f]{3,})/, '').replace(/^[\[［|(（]([名動形副前接助感構頭尾代定])[\]］|)）]/, '$1').replace(/[(（]([1-9])[)）]/g, (m0, d) => CIRC[d - 1]);
 }
 // 左の段の行から、英文の中に見つかる見出し語を取り出す（前後の番号やチェック欄の読み取りは外す）
@@ -1225,13 +1231,15 @@ function withPos(l, pf, pd) {
   if (c === pf || (pf === '名' && '图図'.includes(c)) || (/[Z#]/.test(c) && !/[A-Za-z]/.test(t[1] || ''))) t = t.slice(1);
   return (pd ? '━ ' : '') + pf + ' ' + t.replace(/^\s+/, '');
 }
+// 派生語の語だけの行か（品詞と意味は次の行）
+function wordOnly(l) { const t = l.replace(JUNK, ''), m = t.match(ENRUN); return !!m && !t.slice(m[0].replace(/\s+[FZ#](?:\s.*)?$/, '').length).replace(/^[\s.…·・~〜～]*(?:[(（][^)）]{0,12}[)）])?[\s.…·・~〜～]*(?:[FZ#](?![A-Za-z]))?[\s.…·・]*/, ''); }
 function withMidPos(l, pm) {
   const t = l.replace(JUNK, ''), m = t.match(ENRUN); if (!m) return l;
-  let i = m[0].replace(/\s+[Z#]$/, '').length;   // 名 が Z に読まれたものは語に含めない
+  let i = m[0].replace(/\s+[FZ#](?:\s.*)?$/, '').length;   // 品詞の四角が Z（名）・F（形）に読まれたものは語に含めない
   i += t.slice(i).match(/^[\s.…~〜～]*(?:[(（][^)）]{0,12}[)）])?(?:\s*[\[［][^\]］」]{0,20}[\]］」])?[\s.…~〜～一ー－]*/)[0].length;
   if (!t.slice(i).trim()) return l;   // 語だけの行（品詞と意味は次の行にある）
   const c = t[i] || '';
-  if (c === pm || (pm === '名' && '图図'.includes(c)) || (/[Z#]/.test(c) && !/[A-Za-z]/.test(t[i + 1] || ''))) return t.slice(0, i) + pm + ' ' + t.slice(i + 1).replace(/^\s+/, '');
+  if (c === pm || (pm === '名' && '图図'.includes(c)) || (/[FZ#]/.test(c) && !/[A-Za-z]/.test(t[i + 1] || ''))) return t.slice(0, i) + pm + ' ' + t.slice(i + 1).replace(/^\s+/, '');
   if (POSCH.includes(c)) return l;   // 別の品詞の字が読めている時はそのまま
   return t.slice(0, i).replace(/\s+$/, '') + ' ' + pm + ' ' + t.slice(i);
 }
@@ -1392,11 +1400,11 @@ function pageScan(data, W, H, ex) {
       let pf = '', pd = false, pm = '', k = 0;
       while (k < cw.length && /^[━ーｰ\-－—―一□口|・•]+$/.test(cw[k].t)) { if (/[━ーｰ\-－—―一]/.test(cw[k].t)) pd = true; k++; }
       if (k < cw.length && cw[k].sp) pf = cw[k].t;
-      else if (k < cw.length && /^[A-Za-zÀ-ɏ]/.test(cw[k].t)) { const q = cw.findIndex((w, i) => i > k && w.sp); if (q > 0 && cw.slice(k, q).every(w => !/[ぁ-んァ-ヶ一-龠々]/.test(w.t))) pm = cw[q].t; }
+      else { while (k < cw.length && !cw[k].sp && /^[0-9_\]）)|.,]{1,2}$/.test(cw[k].t)) k++; if (k < cw.length && /^[0-9|_]?[A-Za-zÀ-ɏ]{2}/.test(cw[k].t)) { const q = cw.findIndex((w, i) => i > k && w.sp); if (q > 0 && q - k <= 6 && cw.slice(k + 1, q).every(w => !/[ぁ-んァ-ヶ一-龠々]{2}/.test(w.t))) pm = cw[q].t; } }
       const pc = !!TX && cs.length && cs[0].x0 < TX - lh * 0.8;   // 品詞の四角の列から始まる行
       let t = cs.map(c => c.t).join(' ');
       if (pc && !pf) t = t.replace(/^([（(［\[])\s*([名動形副前接助感構頭尾代定])(?=[ぁ-んァ-ヶ一-龠々])/, '$2 $1').replace(/^([名動形副前接助感構頭尾代定图図])(?=[ぁ-んァ-ヶ一-龠々（(［\[〔])/, (m0, c) => (c === '图' || c === '図' ? '名' : c) + ' ');
-      return {t, x0: r.cs[0].x0, y: r.cs[0].y, ry: (r.cs[0].ry0 + r.cs[0].ry1) / 2, y0: r.y0, y1: r.y1, posBad, pf, pd, pm, pc, cf: ws.reduce((a, w) => a + w.cf, 0) / ws.length};
+      return {t, x0: r.cs[0].x0, y: r.cs[0].y, ry: (r.cs[0].ry0 + r.cs[0].ry1) / 2, y0: r.y0, y1: r.y1, posBad, pf, pd, pm, pc, ps: cw.some(w => w.sp), cf: ws.reduce((a, w) => a + w.cf, 0) / ws.length};
     }).sort((a, b) => a.y - b.y);
   };
   const Rrows = rows(Rc.filter(c => c.x0 <= EDGE - lh)), Lrows = rows(Lc);
@@ -1407,7 +1415,7 @@ function pageScan(data, W, H, ex) {
   // 囲みの左の辺は意味の段の書き出しにそろっている（裏写りの枠などは外れる）
   const boxes = ((ex.marks || {}).boxes || []).filter(b => b.x0 >= DIV - lh * 1.5 && (!TX || Math.abs(b.x0 - TX) < lh * 1.8) && b.x1 - b.x0 >= (EDGE - DIV) * 0.5);
   for (const b of boxes) {
-    const inB = Rrows.filter(r => inBox(b, r.x0 + lh, r.ry) && !r.pf && !r.pm && !relLine(cleanRow(r.t)) && !/^[\s□口ロコ|｜・•]*[a-zÀ-ɏ][a-zÀ-ɏ'’\-]{2,}/.test(r.t));
+    const inB = Rrows.filter(r => inBox(b, r.x0 + lh, r.ry) && !r.pf && !r.pm && !r.ps && !relLine(cleanRow(r.t)) && !/^[\s□口ロコ|｜・•]*[a-zÀ-ɏ][a-zÀ-ɏ'’\-]{2,}/.test(r.t));
     if (inB.some(r => JPRE.test(r.t))) { inB.forEach(r => { r.tr = 1; }); b.ok = 1; }
   }
   // 英語専用で読み直した結果：例文は読み直した方を使い、左の段は読み直した方を先に探す
@@ -1528,7 +1536,28 @@ function buildPhoto(pages, lt) {
     if (blk) {
       const L = blk.L, usedL = new Set(); for (let i = 0; i < blk.i1; i++) usedL.add(i);
       let tb = -1; for (let i = L.length - 1; i >= blk.i1; i--) if (JPRE.test(L[i]) && /。[」』]?$/.test(L[i])) { tb = i; break; }
-      if (tb >= 0) {
+      const pj0 = te < rR.length ? ja : '';
+      if ((tb < 0 || /^[A-Za-zÀ-ɏ]/.test(L[tb])) && pj0 && JPRE.test(pj0)) {
+        // 和訳の始まりは行の途中のこともある（テキスト認識が、すぐ上の派生語の行とつなげてしまう）。
+        // 写真の和訳に近く、その前の部分が写真で和訳のすぐ上の行に近くなる区切りを選ぶ
+        const end = tb >= 0 ? tb : L.length - 1, pb = bigr(pj0), prev = rR[ts - 1] ? bigr(rR[ts - 1].t) : null;
+        let best = null;
+        for (let a = Math.max(blk.i1, end - 3); a <= end; a++) {
+          const T = L.slice(a, end + 1).join('');
+          for (let k = 0; k < L[a].length; k++) {
+            if (!/[ぁ-んァ-ヶ一-龠々「『]/.test(L[a][k])) continue;
+            let v = dice(bigr(T.slice(k)), pb);
+            if (k > 0) v += prev ? 0.5 * (inc(bigr(L[a].slice(0, k)), prev) - 0.5) : -0.1;
+            if (!best || v > best.v + 0.005) best = {a, k, v};
+          }
+        }
+        if (best && best.v >= 0.3) {
+          ja = L.slice(best.a, end + 1).join('').slice(best.k); u.jaLT = true;
+          if (/。[」』]?$/.test(pj0) && !/[。！？!?」』]$/.test(ja)) ja += '。';
+          if (best.k > 0) L[best.a] = L[best.a].slice(0, best.k); else usedL.add(best.a);
+          for (let i = best.a + 1; i <= end; i++) usedL.add(i);
+        }
+      } else if (tb >= 0) {
         let t0 = tb;
         // 和訳の行数：写真で和訳が見つかっていれば、それに一番近くなる行数（前の意味の行を和訳に含めないように）
         const pj = te < rR.length ? ja : '';
@@ -1546,6 +1575,7 @@ function buildPhoto(pages, lt) {
         if (HWRE.test(nx) && /^(?:[a-z]+|…|～|\()/.test(nx) && STOPW.has((nx.match(/^[a-z]+/) || [''])[0])) { const h2 = cleanHw(hw + ' ' + nx); if (locate(u.en, h2)) { hw = h2; i2 = i + 1; } }
         if (!toks(hw).some(o => !STOPW.has(o.t)) || !locate(u.en, hw)) continue;
         if (ltH.some(h => norm(h) === norm(hw))) continue;   // 2回目以降（fair² など）は意味の行
+        { const hb = bigr(hw), sR = Math.max(0, ...rR.filter(inU).map(r => inc(hb, bigr(r.t)))), sL = Math.max(0, ...LrowsE.filter(inU).concat(Lrows.filter(inU)).map(r => inc(hb, bigr(r.t)))); if (sR >= 0.6 && sR > sL + 0.1) continue; }
         ltH.push(hw); for (let q = i; q <= i2; q++) usedL.add(q); if (PRON.test(L[i2 + 1] || '')) usedL.add(i2 + 1);
       }
       const Lall = LrowsE.filter(inU).concat(Lrows.filter(inU));
@@ -1599,28 +1629,61 @@ function buildPhoto(pages, lt) {
     // 文章の行を、文字の並びが一番近い写真の行（どの語の行か分かっている）に対応づける
     if (bl) {
       const rowsU = []; wl.forEach((rs, j) => rs.forEach(r => { const b = bigr(r.t); rowsU.push({j, y: r.y, r, b, cov: b.n < 3}); }));
-      const asg = [], ok = i => !bl.usedL.has(i) && !PRON.test(bl.L[i]);
-      let cand = 0, hit = 0, prevY = -Infinity;
+      rowsU.sort((a, c) => a.y - c.y);
+      const LB0 = LrowsE.filter(inU).concat(Lrows.filter(inU)).map(r => bigr(r.t));
+      const asg = [], drop = new Set(), ok = i => !bl.usedL.has(i) && !drop.has(i) && !PRON.test(bl.L[i]) && !LTPRON.test(bl.L[i]);
+      let cand = 0, hit = 0;
+      const sim = (b, r) => { const c = bcommon(b, r.b); return c >= 3 ? c / Math.min(b.n, r.b.n) : 0; };
+      const CL = [], dacc = x => x.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+      const derivL = l => { if (!wordOnly(l)) return false; const w = dacc(l.replace(JUNK, '').match(ENRUN)[0]).replace(/\s+[fz#](?:\s.*)?$/, '').replace(/[^a-z' -]/g, '').trim(); return w.length >= 3 && !st.some(o => o.b && (w === o.b || w.slice(1) === o.b)); };
       bl.L.forEach((l, i) => {
         if (!ok(i)) return;
         const b = bigr(l); if (b.n < 3) return;
-        cand++;
-        const sc = rowsU.map(r => { const c = bcommon(b, r.b); return c >= 3 ? c / Math.min(b.n, r.b.n) : 0; });
-        const bs = Math.max(0, ...sc); if (bs < 0.35) return;
-        // ほぼ同じ近さの行が複数ある時（短い行など）は、前の行の位置より後で一番近い行を選ぶ
-        const cs = rowsU.filter((r, q) => sc[q] >= bs - 0.1);
-        const best = cs.filter(r => r.y > prevY + lh * 0.3).sort((a, c) => a.y - c.y)[0] || cs.filter(r => r.y >= prevY - lh * 0.5).sort((a, c) => a.y - c.y)[0] || cs.sort((a, c) => Math.abs(a.y - prevY) - Math.abs(c.y - prevY))[0];
-        asg[i] = {j: best.j, y: best.y, r: best.r}; best.hit = true; hit++; prevY = best.y;
+        const sc = rowsU.map(r => sim(b, r)), sr = Math.max(0, ...sc);
+        // 左の段（見出し語・発音）の行により近い行は、意味の行として使わない
+        const sl = Math.max(0, ...LB0.map(x => inc(b, x)));
+        if (sl >= 0.5 && sl > sr && !derivL(l)) { drop.add(i); return; }
+        cand++; CL.push({i, sc});
       });
+      // 文章の行の順番と写真の行の上下の順番が逆にならない範囲で、近さの合計が一番大きい対応を選ぶ（同じ写真の行に2行対応してもよい）
+      const K = CL.length, M = rowsU.length, V = [], C = [];
+      for (let k = 0; k <= K; k++) { V.push(new Float64Array(M + 1)); C.push(new Int8Array(M + 1)); }
+      for (let k = 1; k <= K; k++) for (let r = 1; r <= M; r++) {
+        let v = V[k][r - 1], c = 1;   // 1: この行より上の写真の行まで
+        if (V[k - 1][r] > v) { v = V[k - 1][r]; c = 2; }   // 2: この文章の行は対応なし
+        const x = CL[k - 1].sc[r - 1];
+        if (x >= 0.3 && V[k - 1][r] + x > v) { v = V[k - 1][r] + x; c = 3; }   // 3: この写真の行に対応
+        V[k][r] = v; C[k][r] = c;
+      }
+      for (let k = K, r = M; k > 0 && r > 0;) {
+        const c = C[k][r];
+        if (c === 1) r--;
+        else if (c === 2) k--;
+        else { const q = rowsU[r - 1], i = CL[k - 1].i; asg[i] = {j: q.j, y: q.y, r: q.r}; q.hit = true; hit++; k--; }
+      }
       const firstL = new Map(); asg.forEach((a, i) => { if (a && a.r && !firstL.has(a.r)) firstL.set(a.r, i); });
       for (const [r, i] of firstL) {
+        if (r.pm && !r.pf && wordOnly(bl.L[i])) {
+          const nx = bl.L[i + 1] || '', cur = bl.L[i].replace(/\s+[FZ#]\s*$/, '').replace(/\s*[·・]+\s*$/, '');
+          if (posOf(nx) || dashPos(nx)) { bl.L[i] = cur; continue; }   // 次の行に品詞がある
+          if (nx[0] === r.pm || (r.pm === '名' && '图図'.includes(nx[0]))) { bl.L[i] = cur; bl.L[i + 1] = r.pm + ' ' + nx.slice(1); continue; }   // 品詞の字がくっついている
+          if (/^[ぁ-んァ-ヶ一-龠々（(［\[〔…～]/.test(nx)) { bl.L[i + 1] = r.pm + ' ' + nx.replace(/^[FZ#](?![A-Za-z])\s*/, ''); bl.L[i] = cur; continue; }
+          bl.L[i] = bl.L[i].replace(/\s+[FZ#]\s*$/, '').replace(/\s*[·・]+\s*$/, '').replace(/\s+$/, '') + ' ' + r.pm + ' '; continue;   // 次の行が英字などで始まる時は、この行の末尾に
+        }
+        if (r.pm && !r.pf && i > 0 && !/^[A-Za-z]/.test(bl.L[i].replace(JUNK, '')) && !posOf(bl.L[i]) && !dashPos(bl.L[i]) && wordOnly(bl.L[i - 1])) { const c0 = bl.L[i][0]; bl.L[i] = r.pm + ' ' + (c0 === r.pm || (r.pm === '名' && '图図'.includes(c0)) ? bl.L[i].slice(1) : bl.L[i]); bl.L[i - 1] = bl.L[i - 1].replace(/\s+[FZ#]\s*$/, ''); continue; }
         let v = r.pf ? withPos(bl.L[i], r.pf, r.pd) : r.pm ? withMidPos(bl.L[i], r.pm) : bl.L[i];
         if (!r.pf && r.pc) v = v.replace(JUNK, '').replace(/^([（(［\[])\s*([名動形副前接助感構頭尾代定])(?=[ぁ-んァ-ヶ一-龠々])/, '$2 $1').replace(/^([名動形副前接助感構頭尾代定图図])(?=[ぁ-んァ-ヶ一-龠々（(［\[〔])/, (m0, c) => (c === '图' || c === '図' ? '名' : c) + ' ');
         bl.L[i] = v;
       }
-      // 対応が見つからなかった行は、すぐ前（無ければすぐ後）の行と同じ語に付ける
-      for (let i = 1; i < bl.L.length; i++) if (!asg[i] && ok(i) && asg[i - 1]) asg[i] = {j: asg[i - 1].j, y: asg[i - 1].y};
-      for (let i = bl.L.length - 2; i >= 0; i--) if (!asg[i] && ok(i) && asg[i + 1]) asg[i] = {j: asg[i + 1].j, y: asg[i + 1].y};
+      // 対応が見つからなかった行は、前後の対応した行の語に付ける。前後で語が違う時は、品詞で始まる行（次の語の意味の書き出し）から後を次の語に付ける
+      { let pa = null, gap = [];
+        const flush = na => {
+          let sw = false;
+          for (const i of gap) { if (!sw && na && pa && na.j !== pa.j && posOf(bl.L[i]) && !dashPos(bl.L[i])) sw = true; const a = sw || !pa ? na : pa; if (a) asg[i] = {j: a.j, y: a.y}; }
+          gap = [];
+        };
+        for (let i = 0; i < bl.L.length; i++) { if (asg[i]) { flush(asg[i]); pa = asg[i]; } else if (ok(i)) gap.push(i); }
+        flush(null); }
       ltCand += cand; ltHit += hit;
       if (cand >= 5 && hit < cand * 0.3) noteS('写真と文章の内容があまり一致しませんでした。同じページか確認してください');
       const lines = words.map(() => []);
@@ -1675,6 +1738,8 @@ function trimEdge(x) { return x.replace(/^[\s|｜\[\]［］_\-—–=~:;'"`]+|[\
 // テキスト認識でコピーした文章を、例文ごとに区切る（例文の行から、次の例文の行の前まで）
 function ltBlocks(text) {
   const L = String(text).replace(/\r\n?/g, '\n').split('\n').map(x => cleanRow(x.replace(/^[\s　|•・]+|[\s　]+$/g, ''))).filter(x => x && !NUMLN.test(x));
+  for (let k = 0; k + 1 < L.length; k++) if (/^[名動形副前接助感構頭尾代定图図]$/.test(L[k]) && !/^[A-Za-z]/.test(L[k + 1]) && !posOf(L[k + 1])) { L[k + 1] = ('图図'.includes(L[k]) ? '名' : L[k]) + ' ' + L[k + 1]; L[k] = ''; }
+  for (let k = L.length - 1; k >= 0; k--) if (!L[k]) L.splice(k, 1);
   const blocks = []; let cur = null;
   for (let k = 0; k < L.length; k++) {
     if ((!cur || cur.hasJa) && isSentStart(L, k)) { cur = {L: [], hasJa: false}; blocks.push(cur); }
